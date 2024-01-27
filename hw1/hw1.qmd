@@ -65,8 +65,11 @@ grading your homework.
 
 5.  After this course, you can make this repository public and use it to
     demonstrate your skill sets on job market.
+    
+***Answer:***
 
-GitHub repository link:https://github.com/ruidzzz00/biostat-203b-2024-winter
+[GitHub link](https://github.com/ruidzzz00/biostat-203b-2024-winter)
+
 
 ## Q2. Data ethics training
 
@@ -82,8 +85,13 @@ complete Q2 before working on the remaining questions.** (Hint: The CITI
 training takes a few hours and the PhysioNet credentialing takes a
 couple days; do not leave it to the last minute.)
 
-![](./citiCompletionCertificate_12933208_60526556.pdf)
-[Certificate](https://drive.google.com/file/d/1squQqmX_557ZCrIBqZz_69ovw7NYvuUb/view?usp=sharing)
+***Answer:***
+
+![1](./citiCompletionCertificate_12933208_60526556.pdf)
+[Certificate](https://www.citiprogram.org/verify/?w34c36bf2-e575-4f93-b29a-6f399c47b6bb-60526556)
+
+![2](./training-report.pdf)
+[Report](https://www.citiprogram.org/verify/?k90f38a23-3f91-4890-92cc-02f2ce63491a-60526556)
 
 
 ## Q3. Linux Shell Commands
@@ -110,8 +118,9 @@ Use Bash commands to answer following questions.
     page <https://mimic.mit.edu/docs/iv/> to understand what's in each
     folder.
 
+***Answer:***
 ```{bash}
-#| eval: false
+#| eval: true
 ls -l ~/mimic/hosp
 ls -l ~/mimic/icu
 ```
@@ -124,6 +133,8 @@ which is a widely used and efficient compression algorithm.
 3.  Briefly describe what Bash commands `zcat`, `zless`, `zmore`, and
     `zgrep` do. 
     
+***Answer:***
+
     zcat: Function: Zcat is used to concatenate and display
     compressed files. It is similar to the 'cat' command but is
     specifically designed to work with compressed files, particularly
@@ -162,19 +173,15 @@ done
 Display the number of lines in each data file using a similar loop.
 (Hint: combine linux commands `zcat <` and `wc -l`.)
 
+***Answer:***
 ```{bash}
-#| eval: false
-for datafile in ~/mimic/hosp/{a,l,pa}*.gz
+#| eval: true
+for datafile in ~/mimic/hosp/*.gz
 do
   echo "Number of lines in $datafile:"
   zcat < "$datafile" | wc -l
 done
 ```
-
-The number of lines in each data file is as follows:
-Number of lines in ~/mimic/hosp/admissions.csv.gz: 431232
-Number of lines in ~/mimic/hosp/labevents.csv.gz: 118171368
-Number of lines in ~/mimic/hosp/patients.csv.gz: 299713
 
 5.  Display the first few lines of `admissions.csv.gz`. How many rows
     are in this data file? How many unique patients (identified by
@@ -182,9 +189,10 @@ Number of lines in ~/mimic/hosp/patients.csv.gz: 299713
     patients listed in the `patients.csv.gz` file? (Hint: combine Linux
     commands `zcat <`, `head`/`tail`, `awk`, `sort`, `uniq`, `wc`, and
     so on.)
-
+    
+***Answer:***
 ```{bash}
-#| eval: false
+#| eval: true
 # Display the first few lines of admissions.csv.gz
 zcat < ~/mimic/hosp/admissions.csv.gz | head
 ```
@@ -198,7 +206,6 @@ The number of rows in this data file is 431232.
 
 ```{bash}
 #| eval: true
-zcat < ~/mimic/hosp/admissions.csv.gz | awk -F',' 'NR>1 {print $1}' | sort -u | wc -l
 zcat < ~/mimic/hosp/admissions.csv.gz | tail -n +2 | cut -d',' -f1 | uniq | wc -l
 zcat < ~/mimic/hosp/patients.csv.gz | tail -n +2 | cut -d',' -f1 | uniq | wc -l
 ```
@@ -216,7 +223,8 @@ number of patients listed in the patients.csv.gz file.
     `ethnicity`? Also report the count for each unique value of these
     variables. (Hint: combine Linux commands `zcat`, `head`/`tail`,
     `awk`, `uniq -c`, `wc`, and so on; skip the header line.)
-
+    
+***Answer:***
 ```{bash}
 #| eval: true
 # admission_type
@@ -249,16 +257,32 @@ zcat < ~/mimic/hosp/admissions.csv.gz | awk -F',' 'NR>1 {print $13}' | sort | un
     speed for big data files. (Hint:
     `gzip -dk < FILENAME.gz > ./FILENAME`. Remember to delete the large
     `labevents.csv` file after the exercise.)
-
+    
+***Answer:***
 ```{bash}
 #| eval: false
+# The output would not be displayed here because run-time is too long, if you want to check it please assign eval to true
 # run time for labevents.csv.gz
 time zcat < ~/mimic/hosp/labevents.csv.gz | wc -l
 gzip -dk < ~/mimic/hosp/labevents.csv.gz > ./labevents.csv
 # Measure time for labevents.csv
-time wc -l ~/mimic/hosp/labevents.csv
-rm labevents.csv # delete the large labevents.csv file
+time wc -l ./labevents.csv
+rm ./labevents.csv # delete the labevents.csv file
 ```
+
+The output displayed in my local machine:
+
+ 118171368
+
+real	0m19.295s
+user	0m22.951s
+sys	0m2.058s
+
+ 118171368 ./labevents.csv
+
+real	0m6.145s
+user	0m4.451s
+sys	0m1.425s
 
 trade-off discussion for Storage vs. Speed: Compressed files offer
 significant storage savings but come at the cost of additional
@@ -285,13 +309,13 @@ Explain what `wget -nc` does. Do **not** put this text file
 `pg42671.txt` in Git. Complete the following loop to tabulate the number
 of times each of the four characters is mentioned using Linux commands.
 
+***Answer:***
 ```{bash}
-#| eval: false
-wget -nc http://www.gutenberg.org/cache/epub/42671/pg42671.txt
+#| eval: true
 for char in Elizabeth Jane Lydia Darcy
 do
   echo "$char:"
-  grep -o -i "$char" pg42671.txt | wc -l
+  grep -o -w "$char" ~/pg42671.txt | wc -l
 done
 ```
 
@@ -313,6 +337,7 @@ and
 #| eval: false
 echo 'hello, world' >> test2.txt
 ```
+***Answer:***
 
 The difference between the two commands is that the first command will
 overwrite the file if it already exists, while the second command will
@@ -337,12 +362,23 @@ Using `chmod` to make the file executable by the owner, and run
 
 ```{bash}
 #| eval: false
+# The output would not be displayed here because pg42671.txt is too large
 chmod +x middle.sh
-./middle.sh pg42671.txt 20 5
+./middle.sh ~/pg42671.txt 20 5
 ```
 
 Explain the output. Explain the meaning of `"$1"`, `"$2"`, and `"$3"` in
 this shell script. Why do we need the first line of the shell script?
+
+***Answer:***
+
+Output in my local machine:
+
+Editor: R. W. Chapman
+
+Release date: May 9, 2013 [eBook #42671]
+
+Language: English
 
 Explanation: The output is a part of the content of the file 
 pg42671.txt to introduce the book's Editor, Release date and Language. 
@@ -361,68 +397,131 @@ Try following commands in Bash and interpret the results: `cal`,
 `last | head`, `echo {con,pre}{sent,fer}{s,ed}`, `time sleep 5`,
 `history | tail`.
 
-```{bash}
-#| eval: false
-cal
-cal 2024
-cal 9 1752
-date
-hostname
-arch
-uname -a
-uptime
-who am i
-who
-w
-id
-last | head
-echo {con,pre}{sent,fer}{s,ed}
-time sleep 5
-history | tail
-```
+***Answer:***
 
-cal: displays a calendar for the current month 
+Commands interpretation with output displayed:
+
+cal: displays a calendar for the current month
+```{bash}
+#| eval: true
+cal
+```
 
 cal 2024: displays a
 calendar for the year 2024 
+```{bash}
+#| eval: true
+cal 2024
+```
 
 cal 9 1752: displays a calendar for the month
 of September in the year 1752 
+```{bash}
+#| eval: true
+cal 9 1752
+``` 
 
 date: displays the current date and time
+```{bash}
+#| eval: true
+date
+```
 
 hostname: displays the name of the current host 
+```{bash}
+#| eval: true
+hostname
+```
 
 arch: displays the
 architecture of the current system 
+```{bash}
+#| eval: true
+arch
+```
 
 uname -a: displays detailed
 information about the current system 
+```{bash}
+#| eval: true
+uname -a
+```
 
 uptime: displays the current time,
 how long the system has been running, and the number of users currently
 logged in 
+```{bash}
+#| eval: true
+uptime
+```
 
 who am i: displays the current user's login name who: displays
 a list of all users currently logged in 
+```{bash}
+#| eval: true
+who am i
+```
 
 w: displays a list of all users
 currently logged in, along with additional information such as the time
 they logged in and the current process they are running 
+```{bash}
+#| eval: false
+w
+```
+The output displayed in my local machine:
+
+19:22  up  4:55, 2 users, load averages: 4.79 2.63 2.12
+USER     TTY      FROM              LOGIN@  IDLE WHAT
+zhangruidong console  -                14:29    4:53 -
+zhangruidong s000     -                14:53       - w
 
 id: displays the
 current user's UID and GID 
+```{bash}
+#| eval: true
+id
+```
 
-last \| head: displays a list of the last
+last | head: displays a list of the last
 users to log in, along with the time they logged in and the terminal
 they used 
+```{bash}
+#| eval: true
+last | head
+```
 
 echo {con,pre}{sent,fer}{s,ed}: displays the words "consents",
 "confered", "presents", and "preferred" on separate lines
+```{bash}
+#| eval: true
+echo {con,pre}{sent,fer}{s,ed}
+```
 
 time sleep 5: displays the amount of time it takes to run the "sleep 5" command
-history \| tail: displays the last 10 commands entered into the shell
+```{bash}
+#| eval: true
+time sleep 5
+```
 
+history | tail: displays the last 10 commands entered into the shell
+```{bash}
+#| eval: false
+history | tail
+```
+The output displayed in my local machine:
+
+  522  arch
+  523  uname -a
+  524  uptime
+  525  who am i
+  526  w
+  527  id
+  528  last | head
+  529  echo {con,pre}{sent,fer}{s,ed}
+  530  time sleep 5
+  531  history | tail
+  
 ## Q6. Book
 
 1.  Git clone the repository
@@ -447,5 +546,6 @@ in a reproducible way.
 For grading purpose, include a screenshot of Section 4.1.5 of the book
 here.
 
+***Answer:***
 ![](./screenshot hw1_Q6.png)
 [Screenshot](https://drive.google.com/file/d/1PYwz0_vB45XhIs1EQDhSh5VXOgeD4m-D/view?usp=sharing)
