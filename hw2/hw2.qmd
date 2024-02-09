@@ -62,38 +62,26 @@ ls -l ~/mimic/icu/
 There are quite a few utilities in R for reading plain text data files. Let us test the speed of reading a moderate sized compressed csv file, `admissions.csv.gz`, by three functions: `read.csv` in base R, `read_csv` in tidyverse, and `fread` in the data.table package.
 
 ***Answer:*** 
-```{r}
-admissions_base <- read.csv("~/mimic/hosp/admissions.csv.gz")
-admissions_base
-```
-
-```{r}
-#| eval: true
-library(tidyverse)
-admissions_tidy <- read_csv("~/mimic/hosp/admissions.csv.gz")
-admissions_tidy
-```
-
-```{r}
-#| eval: true
-library(data.table)
-admissions_data_table <- fread("~/mimic/hosp/admissions.csv.gz")
-admissions_data_table
-```
 
 Which function is fastest? Is there difference in the (default) parsed data types? How much memory does each resultant dataframe or tibble use? (Hint: `system.time` measures run times; `pryr::object_size` measures memory usage.) 
 
 ```{r}
+admissions_base <- read.csv("~/mimic/hosp/admissions.csv.gz")
+admissions_base
 system.time(admissions_base <- read.csv("~/mimic/hosp/admissions.csv.gz"))
 pryr::object_size(admissions_base)
 ```
 
 ```{r}
+admissions_tidy <- read_csv("~/mimic/hosp/admissions.csv.gz")
+admissions_tidy
 system.time(read_csv("~/mimic/hosp/admissions.csv.gz"))
 pryr::object_size(admissions_tidy)
 ```
 
 ```{r}
+admissions_data_table <- fread("~/mimic/hosp/admissions.csv.gz")
+admissions_data_table
 system.time(admissions_data_table <- fread("~/mimic/hosp/admissions.csv.gz"))
 pryr::object_size(admissions_data_table)
 ```
@@ -159,7 +147,7 @@ system.time(labevents_tidy)
 ```
 
 The `read_csv` function in tidyverse takes more than 5 minutes to ingest `labevents.csv.gz` on my computer. Therefore, I abort the program and report my findings. If not aborted, the output is as follows: Error: vector memory exhausted (limit reached?). 
-This code doesn't finish within XXX minutes on my computer. The reason is that the file is too large to be ingested by `read_csv` in tidyverse. The memory usage of the resultant tibble is 1.3 GB.
+This code doesn't finish within 5 minutes on my computer. The reason is that the file is too large to be ingested by `read_csv` in tidyverse. The memory usage of the resultant tibble is 1.3 GB.
 
 ### Q2.2 Ingest selected columns of `labevents.csv.gz` by `read_csv`
 
@@ -172,7 +160,8 @@ labevents_tidy <- read_csv("~/mimic/hosp/labevents.csv.gz", col_select = c(subje
 system.time(labevents_tidy)
 pryr::object_size(labevents_tidy)
 ```
-The ingestion issue is not solved. This code doesn't finish within XXX minutes on my computer. The reason is that the file is still too large to be ingested by `read_csv` in tidyverse. The memory usage of the resultant tibble is 1.3 GB.
+yes, this solves the ingestion issue. the time taken for ingest is 1.5 minutes. The memory usage of the resultant tibble is 1.3 GB.
+
 
 ### Q2.3 Ingest subset of `labevents.csv.gz`
   
@@ -194,14 +183,14 @@ awk -F, 'BEGIN {OFS=","} NR==1 || \
 ($5==50912 || $5==50971 || $5==50983 || \
 $5==50902 || $5==50882 || $5==51221 || \
 $5==51301 || $5==50931) {print $2, $5, $7, $10}' | \
-gzip > labevents_filtered.csv.gz
+gzip > ~/mimic/hosp/labevents_filtered.csv.gz
 ```
-
+       
 #Display the first 10 lines of the new file `labevents_filtered.csv.gz`
 ```{bash}
 #| eval: true
-zcat < labevents_filtered.csv.gz | head -10
-zcat < labevents_filtered.csv.gz | wc -l
+cd ~/mimic/hosp
+zcat < labevents_filtered.csv.gz 2>/dev/null | head -10
 ```
 
 #Display the number of lines in the new file `labevents_filtered.csv.gz`
@@ -209,6 +198,13 @@ zcat < labevents_filtered.csv.gz | wc -l
 #| eval: true
 zcat < labevents_filtered.csv.gz | wc -l
 ```
+
+#How long does it take `read_csv` to ingest `labevents_filtered.csv.gz`?
+```{r}
+system.time(read_csv("labevents_filtered.csv.gz"))
+```
+It takes about 3.55 seconds for `read_csv` to ingest `labevents_filtered.csv.gz` on my computer.
+
 ### Q2.4 Ingest `labevents.csv` by Apache Arrow
 
 <p align="center">
