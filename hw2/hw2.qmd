@@ -70,22 +70,27 @@ There are quite a few utilities in R for reading plain text data files. Let us t
 Which function is fastest? Is there difference in the (default) parsed data types? How much memory does each resultant dataframe or tibble use? (Hint: `system.time` measures run times; `pryr::object_size` measures memory usage.) 
 
 ```{r}
+#| eval: true
 admissions_base <- read.csv("~/mimic/hosp/admissions.csv.gz")
-admissions_base
+str(admissions_base)
 system.time(admissions_base <- read.csv("~/mimic/hosp/admissions.csv.gz"))
 pryr::object_size(admissions_base)
 ```
 
 ```{r}
+#| eval: true
+library(readr)
 admissions_tidy <- read_csv("~/mimic/hosp/admissions.csv.gz")
-admissions_tidy
+str(admissions_tidy)
 system.time(read_csv("~/mimic/hosp/admissions.csv.gz"))
 pryr::object_size(admissions_tidy)
 ```
 
 ```{r}
+#| eval: true
+library(data.table)
 admissions_data_table <- fread("~/mimic/hosp/admissions.csv.gz")
-admissions_data_table
+str(admissions_data_table)
 system.time(admissions_data_table <- fread("~/mimic/hosp/admissions.csv.gz"))
 pryr::object_size(admissions_data_table)
 ```
@@ -218,7 +223,7 @@ $5==51301 || $5==50931) {print $2, $5, $7, $10}' | \
 gzip > ~/mimic/hosp/labevents_filtered.csv.gz
 ```
        
-#Display the first 10 lines and the number of lines in this new file
+Display the first 10 lines and the number of lines in this new file
 ```{bash}
 #| eval: true
 cd ~/mimic/hosp/
@@ -226,7 +231,7 @@ zcat < labevents_filtered.csv.gz 2>/dev/null | head -10
 zcat < labevents_filtered.csv.gz | wc -l
 ```
 
-#How long does it take `read_csv` to ingest `labevents_filtered.csv.gz`?
+Time to ingest `labevents_filtered.csv.gz` by `read_csv`
 ```{r}
 #| eval: true
 system.time(read_csv("~/mimic/hosp/labevents_filtered.csv.gz"))
@@ -247,7 +252,7 @@ Then use [`arrow::open_dataset`](https://arrow.apache.org/docs/r/reference/open_
 ***Answer:*** 
 
 ```{bash}
-#| eval: true
+#| eval: false
 zcat < ~/mimic/hosp/labevents.csv.gz > ~/labevents.csv
 ```
 
@@ -321,6 +326,7 @@ Parquet is like a digital storage format that arranges data in a very organized 
 Ingest the Parquet file, convert it to a DuckDB table by [`arrow::to_duckdb`](https://arrow.apache.org/docs/r/reference/to_duckdb.html), select columns, and filter rows as in Q2.5. How long does the ingest+convert+select+filter process take? Display the number of rows and the first 10 rows of the result tibble and make sure they match those in Q2.3. (Hint: use `dplyr` verbs for selecting columns and filtering rows.)
 
 ```{r}
+#| eval: true
 labevents_parquet <- arrow::open_dataset("~/labevents.parquet")
 system.time({
     labevents_duckdb <- labevents_parquet %>%
