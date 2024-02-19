@@ -58,6 +58,7 @@ sid <- 10001217
 
 Import the necessary data: transfer
 ```{r}
+#|eval = true
 sid_adt <- read_csv("~/mimic/hosp/transfers.csv.gz") %>%
   filter(subject_id == sid) %>%
   collect() %>%
@@ -65,6 +66,7 @@ sid_adt <- read_csv("~/mimic/hosp/transfers.csv.gz") %>%
 ```
 Import the necessary data: labevents
 ```{r}
+#|eval = true
 sid_lab <- arrow::open_dataset("~/labevents_pq") %>%
   filter(subject_id == sid) %>%
   collect() %>% 
@@ -72,6 +74,7 @@ sid_lab <- arrow::open_dataset("~/labevents_pq") %>%
 ```
 
 ```{r}
+#|eval = true
 sid_pcd <- read_csv("~/mimic/hosp/procedures_icd.csv.gz") %>%
   filter(subject_id == sid) %>%
   mutate(chartdate = as.POSIXct(chartdate)) %>%
@@ -83,18 +86,21 @@ sid_pcd <- read_csv("~/mimic/hosp/procedures_icd.csv.gz") %>%
 ```
 
 ```{r}
+#|eval = true
 sid_dcd <- read_csv("~/mimic/hosp/diagnoses_icd.csv.gz") %>%
   filter(subject_id == sid) %>%
   print(width = Inf)
 ```
 
 ```{r}
+#|eval = true
 sid_patients <- read_csv("~/mimic/hosp/patients.csv.gz") %>%
   filter(subject_id == sid) %>%
   print(width = Inf)
 ```
 
 ```{r}
+#|eval = true
 sid_adm <- read_csv("~/mimic/hosp/admissions.csv.gz") %>%
   filter(subject_id == sid) %>%
   print(width = Inf)
@@ -102,12 +108,14 @@ sid_adm <- read_csv("~/mimic/hosp/admissions.csv.gz") %>%
 
 
 ```{r}
+#|eval = true
 sid_dip <- read_csv("~/mimic/hosp/d_icd_procedures.csv.gz") %>%
   collect() %>%
   print(width = Inf)
 ```
 
 ```{r}
+#|eval = true
 sid_did <- read_csv("~/mimic/hosp/d_icd_diagnoses.csv.gz") %>%
   left_join(sid_dcd, by = "icd_code") %>%
   group_by(subject_id, icd_code) %>%
@@ -120,6 +128,7 @@ sid_did <- read_csv("~/mimic/hosp/d_icd_diagnoses.csv.gz") %>%
 
 
 ```{r}
+#|eval = true
 # Visualization
 library(ggplot2)
 
@@ -150,45 +159,6 @@ ggplot() +
   theme(legend.position = "bottom",
         legend.box = "vertical")
 ```
-```{r}
-library(ggplot2)
-library(dplyr)
-library(tidyr)
-
-# Load the data (example with pseudo-code, replace with actual code to load your data)
-patients <- read.csv.gz("patients.csv.gz")
-admissions <- read.csv.gz("admissions.csv.gz")
-transfers <- read.csv.gz("transfers.csv.gz")
-labevents <- read_parquet("labevents_pq")  # Assuming parquet file is already created
-procedures_icd <- read.csv.gz("procedures_icd.csv.gz")
-diagnoses_icd <- read.csv.gz("diagnoses_icd.csv.gz")
-d_icd_procedures <- read.csv.gz("d_icd_procedures.csv.gz")
-d_icd_diagnoses <- read.csv.gz("d_icd_diagnoses.csv.gz")
-
-# Filter data for a specific patient
-patient_data <- filter(patients, subject_id == 10013310)
-
-# Combine the data, this will require several steps of data wrangling
-# involving joins, mutations, and other transformations based on your data structure.
-
-# For example, to create the ADT lines
-adt_data <- admissions %>%
-  filter(subject_id == 10013310) %>%
-  mutate(type = "ADT")
-
-# Process lab and procedure data similarly...
-
-# Plot the data
-ggplot() +
-  geom_segment(data = adt_data, aes(x = start_time, xend = end_time, y = type, yend = type, color = care_unit, size = icu_indicator)) +
-  geom_point(data = lab_data, aes(x = time, y = type, shape = type_of_lab)) +
-  geom_point(data = procedure_data, aes(x = time, y = type, shape = type_of_procedure)) +
-  scale_shape_manual(values = c("Central venous catheter" = 16, "Other incision of brain" = 17, "Spinal tap" = 15)) +
-  labs(title = "Patient 10013310, F, 55 years old, white",
-       subtitle = "Top 3 diagnoses") +
-  theme_minimal()
-```
-
 ### Q1.2 ICU stays
 
 ICU stays are a subset of ADT history. This figure shows the vitals of the patient `10001217` during ICU stays. The x-axis is the calendar time, and the y-axis is the value of the vital. The color of the line represents the type of vital. The facet grid shows the abbreviation of the vital and the stay ID.
@@ -198,11 +168,13 @@ ICU stays are a subset of ADT history. This figure shows the vitals of the patie
 ***Answer***
 
 ```{r}
+#|eval = false
 sid <- sid <- 10001217
 ```
 
 Import the necessary data: chartevents
 ```{r}
+#|eval = false
 sid_chart <- arrow::open_dataset("~/chartevents_pq") %>%
   filter(subject_id == sid) %>%
   collect() %>%
@@ -210,6 +182,7 @@ sid_chart <- arrow::open_dataset("~/chartevents_pq") %>%
 ```
 
 ```{r}
+#|eval = false
 sid_ditems <- read_csv("~/mimic/icu/d_items.csv.gz") %>%
   filter(abbreviation %in% c("HR", "NBPd", "NBPs", "RR", "Temperature F")) %>%
   collect() %>%
@@ -217,6 +190,7 @@ sid_ditems <- read_csv("~/mimic/icu/d_items.csv.gz") %>%
 ```
 
 ```{r}
+#|eval = true
 dit_ICU_stays <- sid_chart %>%
   left_join(sid_ditems, by = "itemid") %>%
   filter(!is.na(abbreviation)) %>%
@@ -225,14 +199,7 @@ dit_ICU_stays <- sid_chart %>%
 ```
 
 ```{r}
-
-# Assuming you have a dataframe 'vitals_data' with columns 'stay_id', 'vital_type', 'value', and 'time'.
-# This dataframe should be filtered for the patient 10013310 and contain only ICU stay data.
-
-# Load your data here
-# vitals_data <- read_your_data_function(...)
-
-# Then, plot the data
+#|eval = true
 library(scales)
 
 # Convert the 'value' column to numeric
@@ -251,7 +218,6 @@ ggplot(data = dit_ICU_stays, aes(x = charttime, y = value, color = abbreviation)
   scale_x_datetime(labels = date_format("%b %d\n%H:%M:%S")) +
   scale_y_continuous(labels = comma)
 
-
 ```
 ## Q2. ICU stays
 
@@ -265,7 +231,7 @@ zcat < ~/mimic/icu/icustays.csv.gz | head
 Import `icustays.csv.gz` as a tibble `icustays_tble`. 
 
 ```{r}
-
+#|eval = true
 icustays_tble <- read_csv("~/mimic/icu/icustays.csv.gz") %>%
   collect() %>%
   print(width = Inf)
@@ -278,6 +244,7 @@ How many unique `subject_id`? Can a `subject_id` have multiple ICU stays? Summar
 ***Answer***
 
 ```{r}
+#|eval = true
 # the numer of unique subject_id
 icustays_tble %>%
   count(subject_id) %>%
@@ -286,6 +253,7 @@ icustays_tble %>%
 There are 46476 unique subject_id.
 
 ```{r}
+#|eval = true
 icustays_sum <- icustays_tble %>%
   group_by(subject_id) %>%
   summarize(n_icu_stays = n_distinct(stay_id)) %>%
@@ -294,6 +262,7 @@ icustays_sum <- icustays_tble %>%
 ```
 
 ```{r}
+#|eval = true
 # the number of ICU stays per `subject_id` by graphs
 icustays_plot <- ggplot(icustays_sum, aes(x = n_icu_stays)) +
   geom_bar(fill = "skyblue", color = "black") +
@@ -317,6 +286,7 @@ Import `admissions.csv.gz` as a tibble `admissions_tble`.
 
 ***Answer***
 ```{r}
+#|eval = true
 admissions_tble <- read_csv("~/mimic/hosp/admissions.csv.gz") %>%
   collect() %>%
   print(admissions_tble, width = Inf)
@@ -337,6 +307,7 @@ According to the [MIMIC-IV documentation](https://mimic.mit.edu/docs/iv/about/co
 
 ***Answer***
 ```{r}
+#|eval = true
 # summary of admissions
  admissions_summary <- admissions_tble %>%
   mutate(admission_hour = hour(admittime),
@@ -351,6 +322,7 @@ print(admissions_summary, width = Inf)
 ```
 
 ```{r}
+#|eval = true
 # number of admissions per patient
 admissions_summary %>%
   count(subject_id) %>%
@@ -361,6 +333,7 @@ admissions_summary %>%
 ```
 
 ```{r}
+#|eval = true
 # admission hour
 admissions_summary %>%
   ggplot(aes(x = admission_hour, y = n)) +
@@ -372,6 +345,7 @@ admissions_summary %>%
 Comment: The number of admissions is lowest at 3am and highest at 2pm.
 
 ```{r}
+#|eval = true
 # admission minute
 admissions_summary %>%
   count(admission_minute) %>%
@@ -385,6 +359,7 @@ admissions_summary %>%
 # length of hospital stay
 #second to day
 
+#|eval = true
 admissions_summary %>%
   ggplot(aes(x = admission_length_seconds)) +
   geom_histogram(binwidth = (max(admissions_summary$admission_length_seconds) - 
@@ -406,6 +381,7 @@ Import `patients.csv.gz` (<https://mimic.mit.edu/docs/iv/modules/hosp/patients/>
 
 ***Answer***
 ```{r}
+#|eval = true
 patients_tble <- read_csv("~/mimic/hosp/patients.csv.gz") %>%
   collect() %>%
   print(patients_tble, width = Inf)
@@ -418,6 +394,7 @@ Summarize variables `gender` and `anchor_age` by graphics, and explain any patte
 #### Answer
 
 ```{r}
+#|eval = true
 # Summary statistics for gender
 gender_summary <- patients_tble %>%
   count(gender) 
@@ -431,6 +408,8 @@ anchor_age_summary <- patients_tble %>%
 ```
 
 ```{r}
+#|eval = true
+# Visualization
 gender_plot <- ggplot(gender_summary, aes(x = gender, y = n)) +
   geom_bar(stat = "identity", fill = "skyblue") +
   labs(x = "Gender", y = "Count", 
@@ -441,6 +420,7 @@ print(gender_plot)
 ```
 
 ```{r}
+#|eval = true
 anchor_age_plot <- ggplot(patients_tble, aes(x = anchor_age)) +
   geom_histogram(binwidth = 5, fill = "skyblue", color = "black") +
   labs(x = "Anchor Age", y = "Count", 
@@ -472,6 +452,7 @@ Hint: Use the Parquet format you generated in Homework 2. For reproducibility, m
 
 ***Answer***
 ```{r}
+#|eval = true
 # Import labevents
 labevents_tble <- arrow::open_dataset("~/labevents_pq") %>%
   filter(subject_id %in% icustays_tble$subject_id) %>%
@@ -480,6 +461,7 @@ labevents_tble <- arrow::open_dataset("~/labevents_pq") %>%
 ```
 
 ```{r}
+#|eval = true
 # Import d_labitems
 d_labitems_tble <- read_csv("~/mimic/hosp/d_labitems.csv.gz") %>%
   filter(itemid %in% c(50912, 50971, 50983, 50902, 50882, 51221, 51301, 50931)) %>%
@@ -487,6 +469,7 @@ d_labitems_tble <- read_csv("~/mimic/hosp/d_labitems.csv.gz") %>%
 ```
 
 ```{r}
+#|eval = true
 # Merge labevents and d_labitems
 lab_tble <- labevents_tble %>%
   left_join(d_labitems_tble, by = "itemid") %>%
@@ -494,6 +477,7 @@ lab_tble <- labevents_tble %>%
 ```
 
 ```{r}
+#|eval = true
 # Summary statistics for lab_tble
 lab_summary <- lab_tble %>%
   group_by(subject_id) %>%
@@ -505,6 +489,7 @@ lab_summary <- lab_tble %>%
 ```
 
 ```{r}
+#|eval = true
 # Visualization
 lab_summary %>%
   ggplot(aes(x = creatinine, y = potassium)) +
@@ -514,6 +499,7 @@ lab_summary %>%
 ```
 
 ```{r}
+#|eval = true
 lab_summary %>%
   ggplot(aes(x = sodium, y = chloride)) +
   geom_point() +
@@ -522,6 +508,7 @@ lab_summary %>%
 ```
 
 ```{r}
+#|eval = true
 lab_summary %>%
   ggplot(aes(x = bicarbonate, y = hematocrit)) +
   geom_point() +
@@ -530,6 +517,7 @@ lab_summary %>%
 ```
 
 ```{r}
+#|eval = true
 lab_summary %>%
   ggplot(aes(x = white_blood_cell_count, y = glucose)) +
   geom_point() +
@@ -557,6 +545,7 @@ Hint: Use the Parquet format you generated in Homework 2. For reproducibility, m
 
 ***Answer***
 ```{r}
+#|eval = true
 # Import chartevents
 chartevents_tble <- arrow::open_dataset("~/chartevents_pq") %>%
   filter(subject_id %in% icustays_tble$subject_id) %>%
@@ -565,6 +554,7 @@ chartevents_tble <- arrow::open_dataset("~/chartevents_pq") %>%
 ```
 
 ```{r}
+#|eval = true
 # Import d_items
 d_items_tble <- read_csv("~/mimic/icu/d_items.csv.gz") %>%
   filter(itemid %in% c(220045, 220179, 220180, 223761, 220210)) %>%
@@ -572,6 +562,7 @@ d_items_tble <- read_csv("~/mimic/icu/d_items.csv.gz") %>%
 ```
 
 ```{r}
+#|eval = true
 # Merge chartevents and d_items
 chart_tble <- chartevents_tble %>%
   left_join(d_items_tble, by = "itemid") %>%
@@ -579,6 +570,7 @@ chart_tble <- chartevents_tble %>%
 ```
 
 ```{r}
+#|eval = true
 # Summary statistics for chart_tble
 chart_summary <- chart_tble %>%
   group_by(subject_id) %>%
@@ -590,6 +582,7 @@ chart_summary <- chart_tble %>%
 ```
 
 ```{r}
+#|eval = true
 # Visualization
 chart_summary %>%
   ggplot(aes(x = heart_rate, y = systolic_non_invasive_blood_pressure)) +
@@ -599,6 +592,7 @@ chart_summary %>%
 ```
 
 ```{r}
+#|eval = true
 chart_summary %>%
   ggplot(aes(x = diastolic_non_invasive_blood_pressure, y = temperature_f)) +
   geom_point() +
@@ -607,6 +601,7 @@ chart_summary %>%
 ```
 
 ```{r}
+#|eval = true
 chart_summary %>%
   ggplot(aes(x = respiratory_rate, y = temperature_f)) +
   geom_point() +
@@ -615,6 +610,7 @@ chart_summary %>%
 ```
 
 ```{r}
+#|eval = true
 chart_summary %>%
   ggplot(aes(x = respiratory_rate, y = heart_rate)) +
   geom_point() +
@@ -623,6 +619,7 @@ chart_summary %>%
 ```
 
 ```{r}
+#|eval = true
 chart_summary %>%
   ggplot(aes(x = diastolic_non_invasive_blood_pressure, y = systolic_non_invasive_blood_pressure)) +
   geom_point() +
@@ -632,6 +629,7 @@ chart_summary %>%
 ```
 
 ```{r}
+#|eval = true
 chart_summary %>%
   ggplot(aes(x = diastolic_non_invasive_blood_pressure, y = heart_rate)) +
   geom_point() +
@@ -640,6 +638,7 @@ chart_summary %>%
 ```
 
 ```{r}
+#|eval = true
 chart_summary %>%
   ggplot(aes(x = diastolic_non_invasive_blood_pressure, y = respiratory_rate)) +
   geom_point() +
@@ -648,6 +647,7 @@ chart_summary %>%
 ```
 
 ```{r}
+#|eval = true
 chart_summary %>%
   ggplot(aes(x = systolic_non_invasive_blood_pressure, y = heart_rate)) +
   geom_point() +
@@ -656,6 +656,7 @@ chart_summary %>%
 ```
 
 ```{r}
+#|eval = true
 chart_summary %>%
   ggplot(aes(x = systolic_non_invasive_blood_pressure, y = respiratory_rate)) +
   geom_point() +
@@ -664,6 +665,7 @@ chart_summary %>%
 ```
 
 ```{r}
+#|eval = true
 chart_summary %>%
   ggplot(aes(x = temperature_f, y = heart_rate)) +
   geom_point() +
@@ -672,6 +674,7 @@ chart_summary %>%
 ```
 
 ```{r}
+#|eval = true
 chart_summary %>%
   ggplot(aes(x = temperature_f, y = respiratory_rate)) +
   geom_point() +
@@ -680,6 +683,7 @@ chart_summary %>%
 ```
 
 ```{r}
+#|eval = true
 chart_summary %>%
   ggplot(aes(x = temperature_f, y = systolic_non_invasive_blood_pressure)) +
   geom_point() +
@@ -688,6 +692,7 @@ chart_summary %>%
 ```
 
 ```{r}
+#|eval = true
 chart_summary %>%
   ggplot(aes(x = temperature_f, y = diastolic_non_invasive_blood_pressure)) +
   geom_point() +
@@ -713,6 +718,7 @@ Hint: Use the Parquet format you generated in Homework 2. For reproducibility, m
 
 ***Answer***
 ```{r}
+#|eval = true
 # Merge icustays_tble, admissions_tble, patients_tble, lab_summary, and chart_summary
 mimic_icu_cohort <- icustays_tble %>%
   left_join(admissions_tble, by = "hadm_id") %>%
@@ -723,22 +729,26 @@ mimic_icu_cohort <- icustays_tble %>%
 ```
 
 ```{r}
+#|eval = true
 # Save mimic_icu_cohort as a Parquet file
 arrow::write_dataset(mimic_icu_cohort, "mimic_icu_cohort_pq")
 ```
 
 ```{r}
+#|eval = true
 # Save mimic_icu_cohort as a CSV file
 write_csv(mimic_icu_cohort, "mimic_icu_cohort.csv")
 ```
 
 ```{r}
+#|eval = true
 # Summary statistics for mimic_icu_cohort
 mimic_icu_cohort %>%
   print(width = Inf)
 ```
 
 ```{r}
+#|eval = true
 # Visualization
 mimic_icu_cohort %>%
   ggplot(aes(x = anchor_age, y = los)) +
@@ -748,6 +758,7 @@ mimic_icu_cohort %>%
 ```
 
 ```{r}
+#|eval = false
 mimic_icu_cohort %>%
   ggplot(aes(x = 
                
@@ -773,6 +784,7 @@ Summarize the following information about the ICU stay cohort `mimic_icu_cohort`
 
 ***Answer***
 ```{r}
+#|eval = false
 # Visualization
 mimic_icu_cohort %>%
   ggplot(aes(x = anchor_age, y = los)) +
@@ -782,6 +794,7 @@ mimic_icu_cohort %>%
 ```
 
 ```{r}
+#|eval = false
 mimic_icu_cohort %>%
   ggplot(aes(x = 
                
@@ -792,6 +805,7 @@ mimic_icu_cohort %>%
 ```
 
 ```{r}
+#|eval = false
 mimic_icu_cohort %>%
   ggplot(aes(x = 
                
@@ -802,6 +816,7 @@ mimic_icu_cohort %>%
 ```
 
 ```{r}
+#|eval = false
 mimic_icu_cohort %>%
   ggplot(aes(x = 
                
@@ -812,6 +827,7 @@ mimic_icu_cohort %>%
 ```
 
 ```{r}
+#|eval = false
 mimic_icu_cohort %>%
   ggplot(aes(x = 
                
@@ -823,6 +839,7 @@ mimic_icu_cohort %>%
 ```
 
 ```{r}
+#|eval = false
 mimic_icu_cohort %>%
   ggplot(aes(x = 
                
@@ -833,6 +850,7 @@ mimic_icu_cohort %>%
 ```
 
 ```{r}
+#|eval = false
 mimic_icu_cohort %>%
   ggplot(aes(x = 
                
@@ -843,6 +861,7 @@ mimic_icu_cohort %>%
 ```
 
 ```{r}
+#|eval = false
 mimic_icu_cohort %>%
   ggplot(aes(x = 
                
