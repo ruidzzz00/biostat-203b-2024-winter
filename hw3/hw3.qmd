@@ -189,34 +189,29 @@ sid_ditems <- read_csv("~/mimic/icu/d_items.csv.gz") %>%
 ```
 
 ```{r}
-#|eval = true
-dit_ICU_stays <- sid_chart %>%
-  left_join(sid_ditems, by = "itemid") %>%
-  filter(!is.na(abbreviation)) %>%
-  mutate(value <- as.numeric(value)) %>%
-  print(width = Inf)
-```
-
-```{r}
-#|eval = true
+library(ggplot2)
 library(scales)
+library(dplyr)
 
-# Convert the 'value' column to numeric
-dit_ICU_stays$value <- as.numeric(dit_ICU_stays$value)
+# Assuming dit_ICU_stays is already loaded and contains the correct data
 
+# Make sure the 'value' column is numeric
+dit_ICU_stays <- dit_ICU_stays %>%
+  mutate(value = as.numeric(value)) 
+
+# Plot the graph
 ggplot(data = dit_ICU_stays, aes(x = charttime, y = value, color = abbreviation)) + 
   geom_line() +
-  facet_grid(abbreviation ~ stay_id, scales = "free_x", space = "free_y") +
+  facet_grid(abbreviation ~ stay_id, scales = "free") + # both axes have free scales
   labs(title = paste("Patient", sid, "ICU stays - Vitals"),
        x = "",
        y = "") +
   theme_minimal() +
-  # remove abbreviation from theme legend
-  theme(legend.title = element_blank()) +
-  
-  scale_x_datetime(labels = date_format("%b %d\n%H:%M:%S")) +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(hjust = 1, size = 6), 
+        axis.text.y = element_text(size = 8)) + 
+  scale_x_datetime(labels = date_format("%b %d %H:%M")) +
   scale_y_continuous(labels = comma)
-
 ```
 ## Q2. ICU stays
 
@@ -499,38 +494,44 @@ Hint: Use the Parquet format you generated in Homework 2. For reproducibility, m
 ```{r}
 #|eval = true
 # Import chartevents
-chartevents_tble <- read_csv("~/mimic/icu/chartevents.csv.gz") %>%
-  filter(itemid %in% c(220045, 220179, 220180, 223761, 220210)) %>%
-  collect() %>%
-  print(width = Inf)
+d_items <- read_csv("~/mimic/icu/d_items.csv.gz")
 
+# Specify vital signs itemids
 vital_itemids <- c(220045, 220179, 220180, 223761, 220210)
-chartevents_filtered <- 
-  filter(itemid %in% vital_itemids)
 
-# Join with icustays data
-chartevents_icustays <- chartevents_filtered %>%
+# Load chartevents data from Parquet (more efficient for large datasets)
+chartevents_tble <- arrow::open_dataset("~/chartevents_pq", format = "parquet") %>%
+  filter(itemid %in% vital_itemids) %>%
+  collect()
+
+# Ensure subject_id is of the same type in both datasets
+icustays_tble <- icustays_tble %>%
+  mutate(subject_id = as.character(subject_id))
+
+chartevents_tble <- chartevents_tble %>%
+  mutate(subject_id = as.character(subject_id))
+
+# Join chartevents with icustays
+chartevents_icustays <- chartevents_tble %>%
   inner_join(icustays_tble, by = c("subject_id", "hadm_id", "stay_id")) %>%
   filter(charttime >= intime & charttime <= outtime)
 
-# Select first measurement within ICU stay
+# Select the first measurement within ICU stay
 chartevents_first_meas <- chartevents_icustays %>%
   group_by(subject_id, stay_id, itemid) %>%
-  summarise(value = first(value, order_by = charttime)) %>%
-  ungroup()
+  summarise(value = first(value, order_by = charttime), .groups = "drop")
 
 # Pivot to the required format
-chartevents_tble <- chartevents_first_meas %>%
+chartevents_final_tble <- chartevents_first_meas %>%
   pivot_wider(
     id_cols = c(subject_id, stay_id),
     names_from = itemid,
-    values_from = value
+    values_from = value,
+    names_prefix = "vital_"
   )
+chartevents_final_tble
 ```
 
-```{r}
-icustays_tble <- icustays_tble %>%
-  mutate(subject_id = as.integer)
 ## Q7. Putting things together
 
 Let us create a tibble `mimic_icu_cohort` for all ICU stays, where rows are all ICU stays of adults (age at `intime` >= 18) and columns contain at least following variables
@@ -550,30 +551,66 @@ Hint: Use the Parquet format you generated in Homework 2. For reproducibility, m
 ***Answer***
 ```{r}
 #|eval = true
+labevents_tble <- arrow::open_dataset("~/labevents_pq") %>%
+  filter(subject_id == mimic_icu_cohort$subject_id & hadm_id == mimic_icu_cohort$hadm_id) %>%
+  collect() %>% 
+  print(width = Inf)
+```
+
+```{r}
+#|eval = true
+chartevents_tble <- arrow::open_dataset("~/chartevents_pq") %>%
+  filter(subject_id == mimic_icu_cohort$subject_id & stay_id == mimic_icu_cohort$stay_id) %>%
+  
+  collect() %>% 
+  print(width = Inf)
+```
+
+```{r}
+#|eval = true
 # Merge icustays_tble, admissions_tble, patients_tble, lab_summary, and chart_summary
 mimic_icu_cohort <- icustays_tble %>%
   left_join(patients_tble, by = "subject_id") %>%
   filter(year(intime) - anchor_year + anchor_age >= 18) %>%
   print(width = Inf)
 ```
-
-```{r}
-final_mimic_icu_cohort <- mimic_icu_cohort %>%
-  left_join(admissions_tble, by = "hadm_id") %>%
-  left_join(labevents_tble, by = "hadm_id") %>%
-  left_join(chartevents_tble, by = "hadm_id") %>%
-  select(subject_id, hadm_id, icustay_id, intime, outtime, first_careunit, last_careunit, los, gender, anchor_age, anchor_year, anchor_year_group, dod) %>%
-  print(width = Inf)
-```
-
-
 ```{r}
 #|eval = true
-# Summary statistics for mimic_icu_cohort
-mimic_icu_cohort %>%
+mime_icu_cohort <- mimic_icu_cohort %>%
+  left_join(admissions_tble, by = "hadm_id") %>%
   print(width = Inf)
 ```
 
+```{r}
+# Assuming mimic_icu_cohort, labevents_tble, and chartevents_tble are already defined
+
+# Filter labevents_tble for the last lab measurement before ICU stay
+labevents_filtered <- labevents_tble %>%
+  left_join(mimic_icu_cohort %>% select(subject_id, hadm_id, intime), by = c("subject_id", "hadm_id")) %>%
+  group_by(subject_id, hadm_id) %>%
+  filter(charttime < intime) %>%
+  arrange(desc(charttime)) %>%
+  slice(1) %>%
+  ungroup()
+
+# Step 3: Filter chartevents_tble
+# Get the first vital measurement during each ICU stay
+chartevents_filtered <- chartevents_tble %>%
+  left_join(mimic_icu_cohort %>% select(stay_id, intime), by = "stay_id") %>%
+  group_by(stay_id) %>%
+  filter(charttime >= intime) %>%
+  arrange(charttime) %>%
+  slice(1) %>%
+  ungroup()
+
+# Step 4: Join the filtered tables with mimic_icu_cohort
+final_mimic_icu_cohort <- mimic_icu_cohort %>%
+  left_join(labevents_filtered, by = c("subject_id", "hadm_id")) %>%
+  left_join(chartevents_filtered, by = "stay_id")
+
+# Print the final table
+print(final_mimic_icu_cohort, width = Inf)
+```
 
 ## Q8. Exploratory data analysis (EDA)
 
