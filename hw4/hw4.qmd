@@ -153,10 +153,10 @@ chartevents_tble <- tbl(con_bq, "chartevents") %>%
   pivot_wider(names_from = itemid, values_from = valuenum, names_prefix = "chart_") %>%
   rename(
     heart_rate = `chart_220045`,
-    systolic_bp = `chart_220179`,
-    diastolic_bp = `chart_220180`,
+    non_invasive_blood_pressure_systolic	 = `chart_220179`,
+    non_invasive_blood_pressure_diastolic = `chart_220180`,
     respiratory_rate = `chart_220210`,
-    temperature_f = `chart_223761`
+    temperature_fahrenheit = `chart_223761`
   ) %>%
   select(-intime, -outtime) %>%
   arrange(subject_id, stay_id) %>%
@@ -191,6 +191,49 @@ Hint: Below is a numerical summary of my tibble after preprocessing:
 
 <iframe width=95% height="500" src="./mimic_icu_cohort_gtsummary.html"></iframe>
 
+```{r}
+library(dplyr)
+library(forcats)
+library(gtsummary)
+
+# Assuming mimic_icu_cohort is the tibble from previous steps
+mimic_icu_cohort_pre <- mimic_icu_cohort %>%
+  mutate(
+    first_careunit = fct_lump(first_careunit, n = 4, other_level = "Other"),
+    last_careunit = fct_lump(last_careunit, n = 4, other_level = "Other"),
+    # removed Median (IQR) here
+    los = as.numeric(los),
+    admission_type = fct_lump(admission_type, n = 4, other_level = "Other"),
+    admission_location = fct_lump(admission_location, n = 3, other_level = "Other"),
+    discharge_location = fct_lump(discharge_location, n = 4, other_level = "Other"),
+    race = fct_collapse(
+      race,
+      ASIAN = c("ASIAN", "ASIAN - ASIAN INDIAN", "ASIAN - CHINESE", "ASIAN - KOREAN", "ASIAN - SOUTH EAST ASIAN"),
+      BLACK = c("BLACK/AFRICAN", "BLACK/AFRICAN AMERICAN", "BLACK/CAPE VERDEAN", "BLACK/CARIBBEAN ISLAND"),
+      HISPANIC = c("HISPANIC OR LATINO", "HISPANIC/LATINO - CENTRAL AMERICAN", "HISPANIC/LATINO - COLUMBIAN",
+                   "HISPANIC/LATINO - CUBAN", "HISPANIC/LATINO - DOMINICAN", "HISPANIC/LATINO - GUATEMALAN",
+                   "HISPANIC/LATINO - HONDURAN", "HISPANIC/LATINO - MEXICAN", "HISPANIC/LATINO - PUERTO RICAN",
+                   "HISPANIC/LATINO - SALVADORAN"),
+      WHITE = c("WHITE", "WHITE - BRAZILIAN", "WHITE - EASTERN EUROPEAN", "WHITE - OTHER EUROPEAN", "WHITE - RUSSIAN"),
+      other_level = "Other"),
+    los_long = los >= 2) %>%
+  select(-admit_provider_id, -subject_id, -hadm_id, -stay_id, -anchor_age, 
+         -anchor_year, -intime, -outtime,
+          -admittime, -dischtime, -deathtime, -edregtime, -anchor_year_group,
+         -edouttime)
+  format_race <- function(x) {
+  gtsummary::fmt_number(x, decimals = 1, suffixing = c(" (%)"))
+  }
+# Summarize the data with tbl_summary(), stratified by los_long
+summary_table <- mimic_icu_cohort_pre %>%
+  tbl_summary(
+    by = los_long, # stratify by los_long
+    type = all_continuous() ~ "continuous2",
+    missing = "ifany",
+  )
+
+summary_table
+```
 ### Q1.9 Save the final tibble
 
 Save the final tibble to an R data file `mimic_icu_cohort.rds` in the `mimiciv_shiny` folder.
@@ -216,3 +259,106 @@ Although it is not a good practice to add big data files to git, for grading pur
 
 Develop a Shiny app for exploring the ICU cohort data created in Q1. The app should reside in the `mimiciv_shiny` folder. The app should contain at least two tabs. One tab provides easy access to the graphical and numerical summaries of variables (demographics, lab measurements, vitals) in the ICU cohort. The other allows user to choose a specific patient in the cohort and display the patient's ADT and ICU stay information as we did in Q1 of HW3.
 
+```{r}
+library(shiny)
+library(ggplot2)
+library(dplyr)
+
+# Load the dataset
+mimic_icu_cohort <- readRDS("mimiciv_shiny/mimic_icu_cohort.rds")
+
+# Define UI for dataset viewer app ----
+ui <- fluidPage(
+  titlePanel("ICU Cohort Data Exploration"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("variable", "Variable of interest", choices = names(mimic_icu_cohort)),
+      checkboxInput("outliers", "Remove outliers in IQR method for measurements?", FALSE)
+    ),
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Patient characteristics", plotOutput("variablePlot")),
+        tabPanel("Patients' ADT and ICU stay information",
+                 selectInput("patientID", "Select a Patient", choices = unique(mimic_icu_cohort$subject_id)),
+                 verbatimTextOutput("patientInfo")
+        )
+      )
+    )
+  )
+)
+
+# Define server logic to summarize and view selected dataset ----
+server <- function(input, output) {
+  
+  output$variablePlot <- renderPlot({
+    data <- mimic_icu_cohort
+    if(input$outliers) {
+      # Assume that we are dealing with a numeric variable and remove outliers
+      data <- data %>% filter(between(!!sym(input$variable), quantile(!!sym(input$variable), 0.25), quantile(!!sym(input$variable), 0.75)))
+    }
+    ggplot(data, aes_string(x = input$variable)) + geom_bar()
+  })
+
+  output$patientInfo <- renderPrint({
+    req(input$patientID)
+    patient_data <- mimic_icu_cohort %>% filter(subject_id == input$patientID)
+    patient_data
+  })
+  
+}
+
+# Create Shiny app ----
+shinyApp(ui, server)
+```
+
+```{r}
+library(shiny)
+library(ggplot2)
+library(dplyr)
+
+# Load the dataset
+mimic_icu_cohort <- readRDS("mimiciv_shiny/mimic_icu_cohort.rds")
+
+# Define UI for dataset viewer app ----
+ui <- fluidPage(
+  titlePanel("ICU Cohort Data Exploration"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("variable", "Variable of interest", choices = names(mimic_icu_cohort)),
+      checkboxInput("outliers", "Remove outliers in IQR method for measurements?", FALSE)
+    ),
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Patient characteristics", plotOutput("variablePlot")),
+        tabPanel("Patients' ADT and ICU stay information",
+                 selectInput("patientID", "Select a Patient", choices = unique(mimic_icu_cohort$subject_id)),
+                 verbatimTextOutput("patientInfo")
+        )
+      )
+    )
+  )
+)
+
+# Define server logic to summarize and view selected dataset ----
+server <- function(input, output) {
+  
+  output$variablePlot <- renderPlot({
+    data <- mimic_icu_cohort
+    if(input$outliers) {
+      # Assume that we are dealing with a numeric variable and remove outliers
+      data <- data %>% filter(between(!!sym(input$variable), quantile(!!sym(input$variable), 0.25), quantile(!!sym(input$variable), 0.75)))
+    }
+    ggplot(data, aes_string(x = input$variable)) + geom_bar()
+  })
+
+  output$patientInfo <- renderPrint({
+    req(input$patientID)
+    patient_data <- mimic_icu_cohort %>% filter(subject_id == input$patientID)
+    patient_data
+  })
+  
+}
+
+# Create Shiny app ----
+shinyApp(ui, server)
+```
