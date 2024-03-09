@@ -33,8 +33,9 @@ ui <- fluidPage(
                       sidebarLayout(
                         sidebarPanel(
                           selectInput("variable", "Variable of interest",
-                                      choices = c("Last care unit", 
-                                                  "Lab Events")),
+                                      choices = c("Last care unit", "Lab Events"
+                                        , "Race", "Gender", "Age", "Language", 
+                                        "First Care Unit")),
                           checkboxInput("outliers", "Remove outliers in 
                                         IQR method for measurements?", FALSE)
                         ),
@@ -111,8 +112,44 @@ server <- function(input, output, session) {
         geom_boxplot() +
         theme_minimal()
     }
+    else if (input$variable == "Race") {
+      data <- mimic_icu_cohort()
+      ggplot(data, aes_string(x = "race")) +
+        geom_bar() +
+        coord_flip() +
+        labs (y = "Count", x = "Race") +
+        theme_minimal()
+    }
+    else if (input$variable == "Age") {
+      data <- mimic_icu_cohort()
+      ggplot(data, aes_string(x = "anchor_age")) +
+        geom_histogram(binwidth = 5) +
+        labs(y = "Count", x = "Age") +
+        theme_minimal()
+    }
+    else if (input$variable == "First Care Unit") {
+      data <- mimic_icu_cohort()
+      ggplot(data, aes_string(x = "first_careunit")) +
+        geom_bar() +
+        coord_flip() +
+        labs(y = "Count", x = "First care unit") +
+        theme_minimal()
+    }
+    else if (input$variable == "Gender") {
+      data <- mimic_icu_cohort()
+      ggplot(data, aes_string(x = "gender")) +
+        geom_bar() +
+        labs(y = "Count", x = "age") +
+        theme_minimal()
+    }
+    else if (input$variable == "Language") {
+      data <- mimic_icu_cohort()
+      ggplot(data, aes_string(x = "language")) +
+        geom_bar() +
+        labs(y = "Count", x = "Language") +
+        theme_minimal()
+    }
   })
-  
   
   observe({
     selected_patient_id <- input$patientID
