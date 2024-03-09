@@ -25,7 +25,6 @@ pcd_tble <- tbl(con_bq, "procedures_icd")
 dcd_tble <- tbl(con_bq, "diagnoses_icd")
 did_tble <- tbl(con_bq, "d_icd_diagnoses")
 
-# ... rest of the UI code
 ui <- fluidPage(
   titlePanel("ICU Cohort Data Exploration"),
   navbarPage("ICU Data", id = "nav",
@@ -33,8 +32,9 @@ ui <- fluidPage(
                       sidebarLayout(
                         sidebarPanel(
                           selectInput("variable", "Variable of interest",
-                                      choices = c("Last care unit", "Lab Events"
-                                        , "Race", "Gender", "Age", "Language", 
+                                      choices = c("Last care unit", 
+                                        "Lab Events", "Race", "Gender", 
+                                        "Age", "Language", 
                                         "First Care Unit")),
                           checkboxInput("outliers", "Remove outliers in 
                                         IQR method for measurements?", FALSE)
@@ -47,8 +47,8 @@ ui <- fluidPage(
              tabPanel("Patients' ADT and ICU stay information",
                       sidebarLayout(
                         sidebarPanel(
-                          selectInput("patientID", "Select a Patient", choices = unique(mimic_icu_cohort$subject_id))
-                          #numericInput("patient_id", "Patient ID", 1)
+                          selectInput("patientID", "Select a Patient", 
+                          choices = unique(mimic_icu_cohort$subject_id))
                         ),
                         mainPanel(
                           plotOutput("ADTICUplot")
@@ -70,7 +70,6 @@ server <- function(input, output, session) {
     input$patientID
   })
   
-  # Update the patientID selectInput choices
   observe({
     updateSelectInput(session, "patientID",
                       choices = mimic_icu_cohort()$subject_id)
@@ -226,4 +225,4 @@ server <- function(input, output, session) {
 }
 
 # Run the application
-shinyApp(ui = ui, server = server)
+shinyApp(ui, server)

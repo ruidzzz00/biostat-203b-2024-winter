@@ -3360,7 +3360,7 @@ The following object is masked from &#39;package:readr&#39;:
 <h3 class="anchored" data-anchor-id="q1.5-labevents-data">Q1.5 <code>labevents</code> data</h3>
 <p>Connect to the <code>labevents</code> table and retrieve a subset that only contain subjects who appear in <code>icustays_tble</code> and the lab items listed in HW3. Only keep the last lab measurements before the ICU stay and pivot lab items to become variables/columns. Write all steps in <em>one</em> chain of pipes.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Assuming con_bq is your BigQuery connection object</span></span>
+<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co"># lab item IDs for the measurements of interest</span></span>
 <span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>lab_item_ids <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">50912</span>, <span class="dv">50971</span>, <span class="dv">50983</span>, <span class="dv">50902</span>, <span class="dv">50882</span>, <span class="dv">51221</span>, <span class="dv">51301</span>, <span class="dv">50931</span>)</span>
 <span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>labevents_tble <span class="ot">&lt;-</span> <span class="fu">tbl</span>(con_bq, <span class="st">&quot;labevents&quot;</span>) <span class="sc">%&gt;%</span></span>
@@ -3376,23 +3376,21 @@ The following object is masked from &#39;package:readr&#39;:
 <span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ungroup</span>() <span class="sc">%&gt;%</span></span>
 <span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span>storetime) <span class="sc">%&gt;%</span></span>
 <span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(subject_id, stay_id) <span class="sc">%&gt;%</span></span>
-<span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a>  <span class="co"># remove columns that are not needed</span></span>
-<span id="cb20-18"><a href="#cb20-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_wider</span>(<span class="at">names_from =</span> itemid, <span class="at">values_from =</span> valuenum, </span>
-<span id="cb20-19"><a href="#cb20-19" aria-hidden="true" tabindex="-1"></a>              <span class="at">names_prefix =</span> <span class="st">&quot;lab_&quot;</span>) <span class="sc">%&gt;%</span></span>
-<span id="cb20-20"><a href="#cb20-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rename</span>(</span>
-<span id="cb20-21"><a href="#cb20-21" aria-hidden="true" tabindex="-1"></a>    <span class="at">creatinine =</span> <span class="st">`</span><span class="at">lab_50912</span><span class="st">`</span>,</span>
-<span id="cb20-22"><a href="#cb20-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">potassium =</span> <span class="st">`</span><span class="at">lab_50971</span><span class="st">`</span>,</span>
-<span id="cb20-23"><a href="#cb20-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">sodium =</span> <span class="st">`</span><span class="at">lab_50983</span><span class="st">`</span>,</span>
-<span id="cb20-24"><a href="#cb20-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">chloride =</span> <span class="st">`</span><span class="at">lab_50902</span><span class="st">`</span>,</span>
-<span id="cb20-25"><a href="#cb20-25" aria-hidden="true" tabindex="-1"></a>    <span class="at">bicarbonate =</span> <span class="st">`</span><span class="at">lab_50882</span><span class="st">`</span>,</span>
-<span id="cb20-26"><a href="#cb20-26" aria-hidden="true" tabindex="-1"></a>    <span class="at">hematocrit =</span> <span class="st">`</span><span class="at">lab_51221</span><span class="st">`</span>,</span>
-<span id="cb20-27"><a href="#cb20-27" aria-hidden="true" tabindex="-1"></a>    <span class="at">wbc =</span> <span class="st">`</span><span class="at">lab_51301</span><span class="st">`</span>,</span>
-<span id="cb20-28"><a href="#cb20-28" aria-hidden="true" tabindex="-1"></a>    <span class="at">glucose =</span> <span class="st">`</span><span class="at">lab_50931</span><span class="st">`</span></span>
-<span id="cb20-29"><a href="#cb20-29" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
-<span id="cb20-30"><a href="#cb20-30" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span>intime) <span class="sc">%&gt;%</span></span>
-<span id="cb20-31"><a href="#cb20-31" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(subject_id, stay_id) <span class="sc">%&gt;%</span></span>
-<span id="cb20-32"><a href="#cb20-32" aria-hidden="true" tabindex="-1"></a>  <span class="co"># collect()</span></span>
-<span id="cb20-33"><a href="#cb20-33" aria-hidden="true" tabindex="-1"></a>  <span class="fu">print</span>(<span class="at">width =</span> <span class="cn">Inf</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_wider</span>(<span class="at">names_from =</span> itemid, <span class="at">values_from =</span> valuenum, </span>
+<span id="cb20-18"><a href="#cb20-18" aria-hidden="true" tabindex="-1"></a>              <span class="at">names_prefix =</span> <span class="st">&quot;lab_&quot;</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb20-19"><a href="#cb20-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rename</span>(</span>
+<span id="cb20-20"><a href="#cb20-20" aria-hidden="true" tabindex="-1"></a>    <span class="at">creatinine =</span> <span class="st">`</span><span class="at">lab_50912</span><span class="st">`</span>,</span>
+<span id="cb20-21"><a href="#cb20-21" aria-hidden="true" tabindex="-1"></a>    <span class="at">potassium =</span> <span class="st">`</span><span class="at">lab_50971</span><span class="st">`</span>,</span>
+<span id="cb20-22"><a href="#cb20-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">sodium =</span> <span class="st">`</span><span class="at">lab_50983</span><span class="st">`</span>,</span>
+<span id="cb20-23"><a href="#cb20-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">chloride =</span> <span class="st">`</span><span class="at">lab_50902</span><span class="st">`</span>,</span>
+<span id="cb20-24"><a href="#cb20-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">bicarbonate =</span> <span class="st">`</span><span class="at">lab_50882</span><span class="st">`</span>,</span>
+<span id="cb20-25"><a href="#cb20-25" aria-hidden="true" tabindex="-1"></a>    <span class="at">hematocrit =</span> <span class="st">`</span><span class="at">lab_51221</span><span class="st">`</span>,</span>
+<span id="cb20-26"><a href="#cb20-26" aria-hidden="true" tabindex="-1"></a>    <span class="at">wbc =</span> <span class="st">`</span><span class="at">lab_51301</span><span class="st">`</span>,</span>
+<span id="cb20-27"><a href="#cb20-27" aria-hidden="true" tabindex="-1"></a>    <span class="at">glucose =</span> <span class="st">`</span><span class="at">lab_50931</span><span class="st">`</span></span>
+<span id="cb20-28"><a href="#cb20-28" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb20-29"><a href="#cb20-29" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span>intime) <span class="sc">%&gt;%</span></span>
+<span id="cb20-30"><a href="#cb20-30" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(subject_id, stay_id) <span class="sc">%&gt;%</span></span>
+<span id="cb20-31"><a href="#cb20-31" aria-hidden="true" tabindex="-1"></a>  <span class="fu">print</span>(<span class="at">width =</span> <span class="cn">Inf</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
 <pre><code>Warning: ORDER BY is ignored in subqueries without LIMIT
 ℹ Do you need to move arrange() later in the pipeline or use window_order() instead?
@@ -3595,48 +3593,42 @@ ORDER BY is ignored in subqueries without LIMIT
 <span id="cb30-21"><a href="#cb30-21" aria-hidden="true" tabindex="-1"></a>                <span class="st">&quot;BLACK/CAPE VERDEAN&quot;</span>, <span class="st">&quot;BLACK/CARIBBEAN ISLAND&quot;</span>),</span>
 <span id="cb30-22"><a href="#cb30-22" aria-hidden="true" tabindex="-1"></a>      <span class="at">HISPANIC =</span> <span class="fu">c</span>(<span class="st">&quot;HISPANIC OR LATINO&quot;</span>, <span class="st">&quot;HISPANIC/LATINO - CENTRAL AMERICAN&quot;</span>, </span>
 <span id="cb30-23"><a href="#cb30-23" aria-hidden="true" tabindex="-1"></a>                   <span class="st">&quot;HISPANIC/LATINO - COLUMBIAN&quot;</span>, <span class="st">&quot;HISPANIC/LATINO - CUBAN&quot;</span>, </span>
-<span id="cb30-24"><a href="#cb30-24" aria-hidden="true" tabindex="-1"></a>                   <span class="st">&quot;HISPANIC/LATINO - DOMINICAN&quot;</span>, <span class="st">&quot;HISPANIC/LATINO - </span></span>
-<span id="cb30-25"><a href="#cb30-25" aria-hidden="true" tabindex="-1"></a><span class="st">                   GUATEMALAN&quot;</span>,<span class="st">&quot;HISPANIC/LATINO - HONDURAN&quot;</span>, </span>
-<span id="cb30-26"><a href="#cb30-26" aria-hidden="true" tabindex="-1"></a>                   <span class="st">&quot;HISPANIC/LATINO - MEXICAN&quot;</span>, </span>
-<span id="cb30-27"><a href="#cb30-27" aria-hidden="true" tabindex="-1"></a>                   <span class="st">&quot;HISPANIC/LATINO - PUERTO RICAN&quot;</span>,</span>
-<span id="cb30-28"><a href="#cb30-28" aria-hidden="true" tabindex="-1"></a>                   <span class="st">&quot;HISPANIC/LATINO - SALVADORAN&quot;</span>),</span>
-<span id="cb30-29"><a href="#cb30-29" aria-hidden="true" tabindex="-1"></a>      <span class="at">WHITE =</span> <span class="fu">c</span>(<span class="st">&quot;WHITE&quot;</span>, <span class="st">&quot;WHITE - BRAZILIAN&quot;</span>, <span class="st">&quot;WHITE - EASTERN EUROPEAN&quot;</span>, </span>
-<span id="cb30-30"><a href="#cb30-30" aria-hidden="true" tabindex="-1"></a>                <span class="st">&quot;WHITE - OTHER EUROPEAN&quot;</span>, <span class="st">&quot;WHITE - RUSSIAN&quot;</span>),</span>
-<span id="cb30-31"><a href="#cb30-31" aria-hidden="true" tabindex="-1"></a>      <span class="at">other_level =</span> <span class="st">&quot;Other&quot;</span>),</span>
-<span id="cb30-32"><a href="#cb30-32" aria-hidden="true" tabindex="-1"></a>    <span class="at">los_long =</span> los <span class="sc">&gt;=</span> <span class="dv">2</span>) <span class="sc">%&gt;%</span></span>
-<span id="cb30-33"><a href="#cb30-33" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span>admit_provider_id, <span class="sc">-</span>subject_id, <span class="sc">-</span>hadm_id, <span class="sc">-</span>stay_id, <span class="sc">-</span>anchor_age, </span>
-<span id="cb30-34"><a href="#cb30-34" aria-hidden="true" tabindex="-1"></a>         <span class="sc">-</span>anchor_year, <span class="sc">-</span>intime, <span class="sc">-</span>outtime, <span class="sc">-</span>admittime, <span class="sc">-</span>dischtime, <span class="sc">-</span>deathtime, </span>
-<span id="cb30-35"><a href="#cb30-35" aria-hidden="true" tabindex="-1"></a>         <span class="sc">-</span>edregtime, <span class="sc">-</span>anchor_year_group, <span class="sc">-</span>edouttime)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stderr">
-<pre><code>Warning: There was 1 warning in `mutate()`.
-ℹ In argument: `race = fct_collapse(...)`.
-Caused by warning:
-! Unknown levels in `f`: HISPANIC/LATINO - 
-                   GUATEMALAN</code></pre>
-</div>
-<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Summarize the data with tbl_summary(), stratified by los_long</span></span>
-<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>summary_table <span class="ot">&lt;-</span> mimic_icu_cohort_pre <span class="sc">%&gt;%</span></span>
-<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tbl_summary</span>(</span>
-<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">by =</span> los_long, <span class="co"># stratify by los_long</span></span>
-<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">missing =</span> <span class="st">&quot;ifany&quot;</span>,</span>
-<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a>summary_table</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb30-24"><a href="#cb30-24" aria-hidden="true" tabindex="-1"></a>                   <span class="st">&quot;HISPANIC/LATINO - DOMINICAN&quot;</span>, </span>
+<span id="cb30-25"><a href="#cb30-25" aria-hidden="true" tabindex="-1"></a>                   <span class="st">&quot;HISPANIC/LATINO - GUATEMALAN&quot;</span>,</span>
+<span id="cb30-26"><a href="#cb30-26" aria-hidden="true" tabindex="-1"></a>                   <span class="st">&quot;HISPANIC/LATINO - HONDURAN&quot;</span>, </span>
+<span id="cb30-27"><a href="#cb30-27" aria-hidden="true" tabindex="-1"></a>                   <span class="st">&quot;HISPANIC/LATINO - MEXICAN&quot;</span>, </span>
+<span id="cb30-28"><a href="#cb30-28" aria-hidden="true" tabindex="-1"></a>                   <span class="st">&quot;HISPANIC/LATINO - PUERTO RICAN&quot;</span>,</span>
+<span id="cb30-29"><a href="#cb30-29" aria-hidden="true" tabindex="-1"></a>                   <span class="st">&quot;HISPANIC/LATINO - SALVADORAN&quot;</span>),</span>
+<span id="cb30-30"><a href="#cb30-30" aria-hidden="true" tabindex="-1"></a>      <span class="at">WHITE =</span> <span class="fu">c</span>(<span class="st">&quot;WHITE&quot;</span>, <span class="st">&quot;WHITE - BRAZILIAN&quot;</span>, <span class="st">&quot;WHITE - EASTERN EUROPEAN&quot;</span>, </span>
+<span id="cb30-31"><a href="#cb30-31" aria-hidden="true" tabindex="-1"></a>                <span class="st">&quot;WHITE - OTHER EUROPEAN&quot;</span>, <span class="st">&quot;WHITE - RUSSIAN&quot;</span>),</span>
+<span id="cb30-32"><a href="#cb30-32" aria-hidden="true" tabindex="-1"></a>      <span class="at">other_level =</span> <span class="st">&quot;Other&quot;</span>),</span>
+<span id="cb30-33"><a href="#cb30-33" aria-hidden="true" tabindex="-1"></a>    <span class="at">los_long =</span> los <span class="sc">&gt;=</span> <span class="dv">2</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb30-34"><a href="#cb30-34" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="sc">-</span>admit_provider_id, <span class="sc">-</span>subject_id, <span class="sc">-</span>hadm_id, <span class="sc">-</span>stay_id, <span class="sc">-</span>anchor_age, </span>
+<span id="cb30-35"><a href="#cb30-35" aria-hidden="true" tabindex="-1"></a>         <span class="sc">-</span>anchor_year, <span class="sc">-</span>intime, <span class="sc">-</span>outtime, <span class="sc">-</span>admittime, <span class="sc">-</span>dischtime, <span class="sc">-</span>deathtime, </span>
+<span id="cb30-36"><a href="#cb30-36" aria-hidden="true" tabindex="-1"></a>         <span class="sc">-</span>edregtime, <span class="sc">-</span>anchor_year_group, <span class="sc">-</span>edouttime)</span>
+<span id="cb30-37"><a href="#cb30-37" aria-hidden="true" tabindex="-1"></a><span class="co"># Summarize the data with tbl_summary(), stratified by los_long</span></span>
+<span id="cb30-38"><a href="#cb30-38" aria-hidden="true" tabindex="-1"></a>summary_table <span class="ot">&lt;-</span> mimic_icu_cohort_pre <span class="sc">%&gt;%</span></span>
+<span id="cb30-39"><a href="#cb30-39" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tbl_summary</span>(</span>
+<span id="cb30-40"><a href="#cb30-40" aria-hidden="true" tabindex="-1"></a>    <span class="at">by =</span> los_long, <span class="co"># stratify by los_long</span></span>
+<span id="cb30-41"><a href="#cb30-41" aria-hidden="true" tabindex="-1"></a>    <span class="at">missing =</span> <span class="st">&quot;ifany&quot;</span>,</span>
+<span id="cb30-42"><a href="#cb30-42" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb30-43"><a href="#cb30-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb30-44"><a href="#cb30-44" aria-hidden="true" tabindex="-1"></a>summary_table</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
-<div id="ysoyqodjis" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
-<style>#ysoyqodjis table {
+<div id="vetubisokf" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>#vetubisokf table {
 font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 -webkit-font-smoothing: antialiased;
 -moz-osx-font-smoothing: grayscale;
 }
-#ysoyqodjis thead, #ysoyqodjis tbody, #ysoyqodjis tfoot, #ysoyqodjis tr, #ysoyqodjis td, #ysoyqodjis th {
+#vetubisokf thead, #vetubisokf tbody, #vetubisokf tfoot, #vetubisokf tr, #vetubisokf td, #vetubisokf th {
 border-style: none;
 }
-#ysoyqodjis p {
+#vetubisokf p {
 margin: 0;
 padding: 0;
 }
-#ysoyqodjis .gt_table {
+#vetubisokf .gt_table {
 display: table;
 border-collapse: collapse;
 line-height: normal;
@@ -3661,11 +3653,11 @@ border-left-style: none;
 border-left-width: 2px;
 border-left-color: #D3D3D3;
 }
-#ysoyqodjis .gt_caption {
+#vetubisokf .gt_caption {
 padding-top: 4px;
 padding-bottom: 4px;
 }
-#ysoyqodjis .gt_title {
+#vetubisokf .gt_title {
 color: #333333;
 font-size: 125%;
 font-weight: initial;
@@ -3676,7 +3668,7 @@ padding-right: 5px;
 border-bottom-color: #FFFFFF;
 border-bottom-width: 0;
 }
-#ysoyqodjis .gt_subtitle {
+#vetubisokf .gt_subtitle {
 color: #333333;
 font-size: 85%;
 font-weight: initial;
@@ -3687,7 +3679,7 @@ padding-right: 5px;
 border-top-color: #FFFFFF;
 border-top-width: 0;
 }
-#ysoyqodjis .gt_heading {
+#vetubisokf .gt_heading {
 background-color: #FFFFFF;
 text-align: center;
 border-bottom-color: #FFFFFF;
@@ -3698,12 +3690,12 @@ border-right-style: none;
 border-right-width: 1px;
 border-right-color: #D3D3D3;
 }
-#ysoyqodjis .gt_bottom_border {
+#vetubisokf .gt_bottom_border {
 border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#ysoyqodjis .gt_col_headings {
+#vetubisokf .gt_col_headings {
 border-top-style: solid;
 border-top-width: 2px;
 border-top-color: #D3D3D3;
@@ -3717,7 +3709,7 @@ border-right-style: none;
 border-right-width: 1px;
 border-right-color: #D3D3D3;
 }
-#ysoyqodjis .gt_col_heading {
+#vetubisokf .gt_col_heading {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -3736,7 +3728,7 @@ padding-left: 5px;
 padding-right: 5px;
 overflow-x: hidden;
 }
-#ysoyqodjis .gt_column_spanner_outer {
+#vetubisokf .gt_column_spanner_outer {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -3747,13 +3739,13 @@ padding-bottom: 0;
 padding-left: 4px;
 padding-right: 4px;
 }
-#ysoyqodjis .gt_column_spanner_outer:first-child {
+#vetubisokf .gt_column_spanner_outer:first-child {
 padding-left: 0;
 }
-#ysoyqodjis .gt_column_spanner_outer:last-child {
+#vetubisokf .gt_column_spanner_outer:last-child {
 padding-right: 0;
 }
-#ysoyqodjis .gt_column_spanner {
+#vetubisokf .gt_column_spanner {
 border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
@@ -3764,10 +3756,10 @@ overflow-x: hidden;
 display: inline-block;
 width: 100%;
 }
-#ysoyqodjis .gt_spanner_row {
+#vetubisokf .gt_spanner_row {
 border-bottom-style: hidden;
 }
-#ysoyqodjis .gt_group_heading {
+#vetubisokf .gt_group_heading {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -3792,7 +3784,7 @@ border-right-color: #D3D3D3;
 vertical-align: middle;
 text-align: left;
 }
-#ysoyqodjis .gt_empty_group_heading {
+#vetubisokf .gt_empty_group_heading {
 padding: 0.5px;
 color: #333333;
 background-color: #FFFFFF;
@@ -3806,13 +3798,13 @@ border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 vertical-align: middle;
 }
-#ysoyqodjis .gt_from_md > :first-child {
+#vetubisokf .gt_from_md > :first-child {
 margin-top: 0;
 }
-#ysoyqodjis .gt_from_md > :last-child {
+#vetubisokf .gt_from_md > :last-child {
 margin-bottom: 0;
 }
-#ysoyqodjis .gt_row {
+#vetubisokf .gt_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -3830,7 +3822,7 @@ border-right-color: #D3D3D3;
 vertical-align: middle;
 overflow-x: hidden;
 }
-#ysoyqodjis .gt_stub {
+#vetubisokf .gt_stub {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -3842,7 +3834,7 @@ border-right-color: #D3D3D3;
 padding-left: 5px;
 padding-right: 5px;
 }
-#ysoyqodjis .gt_stub_row_group {
+#vetubisokf .gt_stub_row_group {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -3855,13 +3847,13 @@ padding-left: 5px;
 padding-right: 5px;
 vertical-align: top;
 }
-#ysoyqodjis .gt_row_group_first td {
+#vetubisokf .gt_row_group_first td {
 border-top-width: 2px;
 }
-#ysoyqodjis .gt_row_group_first th {
+#vetubisokf .gt_row_group_first th {
 border-top-width: 2px;
 }
-#ysoyqodjis .gt_summary_row {
+#vetubisokf .gt_summary_row {
 color: #333333;
 background-color: #FFFFFF;
 text-transform: inherit;
@@ -3870,14 +3862,14 @@ padding-bottom: 8px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#ysoyqodjis .gt_first_summary_row {
+#vetubisokf .gt_first_summary_row {
 border-top-style: solid;
 border-top-color: #D3D3D3;
 }
-#ysoyqodjis .gt_first_summary_row.thick {
+#vetubisokf .gt_first_summary_row.thick {
 border-top-width: 2px;
 }
-#ysoyqodjis .gt_last_summary_row {
+#vetubisokf .gt_last_summary_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -3886,7 +3878,7 @@ border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#ysoyqodjis .gt_grand_summary_row {
+#vetubisokf .gt_grand_summary_row {
 color: #333333;
 background-color: #FFFFFF;
 text-transform: inherit;
@@ -3895,7 +3887,7 @@ padding-bottom: 8px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#ysoyqodjis .gt_first_grand_summary_row {
+#vetubisokf .gt_first_grand_summary_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -3904,7 +3896,7 @@ border-top-style: double;
 border-top-width: 6px;
 border-top-color: #D3D3D3;
 }
-#ysoyqodjis .gt_last_grand_summary_row_top {
+#vetubisokf .gt_last_grand_summary_row_top {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -3913,10 +3905,10 @@ border-bottom-style: double;
 border-bottom-width: 6px;
 border-bottom-color: #D3D3D3;
 }
-#ysoyqodjis .gt_striped {
+#vetubisokf .gt_striped {
 background-color: rgba(128, 128, 128, 0.05);
 }
-#ysoyqodjis .gt_table_body {
+#vetubisokf .gt_table_body {
 border-top-style: solid;
 border-top-width: 2px;
 border-top-color: #D3D3D3;
@@ -3924,7 +3916,7 @@ border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#ysoyqodjis .gt_footnotes {
+#vetubisokf .gt_footnotes {
 color: #333333;
 background-color: #FFFFFF;
 border-bottom-style: none;
@@ -3937,7 +3929,7 @@ border-right-style: none;
 border-right-width: 2px;
 border-right-color: #D3D3D3;
 }
-#ysoyqodjis .gt_footnote {
+#vetubisokf .gt_footnote {
 margin: 0px;
 font-size: 90%;
 padding-top: 4px;
@@ -3945,7 +3937,7 @@ padding-bottom: 4px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#ysoyqodjis .gt_sourcenotes {
+#vetubisokf .gt_sourcenotes {
 color: #333333;
 background-color: #FFFFFF;
 border-bottom-style: none;
@@ -3958,57 +3950,57 @@ border-right-style: none;
 border-right-width: 2px;
 border-right-color: #D3D3D3;
 }
-#ysoyqodjis .gt_sourcenote {
+#vetubisokf .gt_sourcenote {
 font-size: 90%;
 padding-top: 4px;
 padding-bottom: 4px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#ysoyqodjis .gt_left {
+#vetubisokf .gt_left {
 text-align: left;
 }
-#ysoyqodjis .gt_center {
+#vetubisokf .gt_center {
 text-align: center;
 }
-#ysoyqodjis .gt_right {
+#vetubisokf .gt_right {
 text-align: right;
 font-variant-numeric: tabular-nums;
 }
-#ysoyqodjis .gt_font_normal {
+#vetubisokf .gt_font_normal {
 font-weight: normal;
 }
-#ysoyqodjis .gt_font_bold {
+#vetubisokf .gt_font_bold {
 font-weight: bold;
 }
-#ysoyqodjis .gt_font_italic {
+#vetubisokf .gt_font_italic {
 font-style: italic;
 }
-#ysoyqodjis .gt_super {
+#vetubisokf .gt_super {
 font-size: 65%;
 }
-#ysoyqodjis .gt_footnote_marks {
+#vetubisokf .gt_footnote_marks {
 font-size: 75%;
 vertical-align: 0.4em;
 position: initial;
 }
-#ysoyqodjis .gt_asterisk {
+#vetubisokf .gt_asterisk {
 font-size: 100%;
 vertical-align: 0;
 }
-#ysoyqodjis .gt_indent_1 {
+#vetubisokf .gt_indent_1 {
 text-indent: 5px;
 }
-#ysoyqodjis .gt_indent_2 {
+#vetubisokf .gt_indent_2 {
 text-indent: 10px;
 }
-#ysoyqodjis .gt_indent_3 {
+#vetubisokf .gt_indent_3 {
 text-indent: 15px;
 }
-#ysoyqodjis .gt_indent_4 {
+#vetubisokf .gt_indent_4 {
 text-indent: 20px;
 }
-#ysoyqodjis .gt_indent_5 {
+#vetubisokf .gt_indent_5 {
 text-indent: 25px;
 }
 </style>
@@ -4309,8 +4301,8 @@ text-indent: 25px;
 </tr>
 <tr class="odd">
 <td class="gt_row gt_left" headers="label">    HISPANIC</td>
-<td class="gt_row gt_center" headers="stat_1">1,398 (3.7%)</td>
-<td class="gt_row gt_center" headers="stat_2">1,175 (3.3%)</td>
+<td class="gt_row gt_center" headers="stat_1">1,492 (3.9%)</td>
+<td class="gt_row gt_center" headers="stat_2">1,249 (3.6%)</td>
 </tr>
 <tr class="even">
 <td class="gt_row gt_left" headers="label">    WHITE</td>
@@ -4319,8 +4311,8 @@ text-indent: 25px;
 </tr>
 <tr class="odd">
 <td class="gt_row gt_left" headers="label">    Other</td>
-<td class="gt_row gt_center" headers="stat_1">5,254 (14%)</td>
-<td class="gt_row gt_center" headers="stat_2">5,670 (16%)</td>
+<td class="gt_row gt_center" headers="stat_1">5,160 (14%)</td>
+<td class="gt_row gt_center" headers="stat_2">5,596 (16%)</td>
 </tr>
 <tr class="even">
 <td class="gt_row gt_left" headers="label">hospital_expire_flag</td>
@@ -4478,20 +4470,20 @@ text-indent: 25px;
 <h3 class="anchored" data-anchor-id="q1.9-save-the-final-tibble">Q1.9 Save the final tibble</h3>
 <p>Save the final tibble to an R data file <code>mimic_icu_cohort.rds</code> in the <code>mimiciv_shiny</code> folder.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb33"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="co"># make a directory mimiciv_shiny</span></span>
-<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">dir.exists</span>(<span class="st">&quot;mimiciv_shiny&quot;</span>)) {</span>
-<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dir.create</span>(<span class="st">&quot;mimiciv_shiny&quot;</span>)</span>
-<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a><span class="co"># save the final tibble</span></span>
-<span id="cb33-6"><a href="#cb33-6" aria-hidden="true" tabindex="-1"></a>mimic_icu_cohort <span class="sc">|&gt;</span></span>
-<span id="cb33-7"><a href="#cb33-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">write_rds</span>(<span class="st">&quot;mimiciv_shiny/mimic_icu_cohort.rds&quot;</span>, <span class="at">compress =</span> <span class="st">&quot;gz&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb31"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="co"># make a directory mimiciv_shiny</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">dir.exists</span>(<span class="st">&quot;mimiciv_shiny&quot;</span>)) {</span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dir.create</span>(<span class="st">&quot;mimiciv_shiny&quot;</span>)</span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a><span class="co"># save the final tibble</span></span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a>mimic_icu_cohort <span class="sc">|&gt;</span></span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">write_rds</span>(<span class="st">&quot;mimiciv_shiny/mimic_icu_cohort.rds&quot;</span>, <span class="at">compress =</span> <span class="st">&quot;gz&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>Close database connection and clear workspace.</p>
 <div class="cell">
-<div class="sourceCode cell-code" id="cb34"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">exists</span>(<span class="st">&quot;con_bq&quot;</span>)) {</span>
-<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dbDisconnect</span>(con_bq)</span>
-<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a><span class="fu">rm</span>(<span class="at">list =</span> <span class="fu">ls</span>())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">exists</span>(<span class="st">&quot;con_bq&quot;</span>)) {</span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dbDisconnect</span>(con_bq)</span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a><span class="fu">rm</span>(<span class="at">list =</span> <span class="fu">ls</span>())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>Although it is not a good practice to add big data files to git, for grading purpose, please add <code>mimic_icu_cohort.rds</code> to your git repository.</p>
 </section>

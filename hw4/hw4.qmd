@@ -102,7 +102,7 @@ patients_tble <- tbl(con_bq, "patients") |>
 Connect to the `labevents` table and retrieve a subset that only contain subjects who appear in `icustays_tble` and the lab items listed in HW3. Only keep the last lab measurements before the ICU stay and pivot lab items to become variables/columns. Write all steps in _one_ chain of pipes.
 
 ```{r eval=TRUE}
-# Assuming con_bq is your BigQuery connection object
+# lab item IDs for the measurements of interest
 lab_item_ids <- c(50912, 50971, 50983, 50902, 50882, 51221, 51301, 50931)
 
 labevents_tble <- tbl(con_bq, "labevents") %>%
@@ -118,7 +118,6 @@ labevents_tble <- tbl(con_bq, "labevents") %>%
   ungroup() %>%
   select(-storetime) %>%
   group_by(subject_id, stay_id) %>%
-  # remove columns that are not needed
   pivot_wider(names_from = itemid, values_from = valuenum, 
               names_prefix = "lab_") %>%
   rename(
@@ -133,7 +132,6 @@ labevents_tble <- tbl(con_bq, "labevents") %>%
   ) %>%
   select(-intime) %>%
   arrange(subject_id, stay_id) %>%
-  # collect()
   print(width = Inf)
 ```
 ### Q1.6 `chartevents` data
@@ -222,8 +220,9 @@ mimic_icu_cohort_pre <- mimic_icu_cohort %>%
                 "BLACK/CAPE VERDEAN", "BLACK/CARIBBEAN ISLAND"),
       HISPANIC = c("HISPANIC OR LATINO", "HISPANIC/LATINO - CENTRAL AMERICAN", 
                    "HISPANIC/LATINO - COLUMBIAN", "HISPANIC/LATINO - CUBAN", 
-                   "HISPANIC/LATINO - DOMINICAN", "HISPANIC/LATINO - 
-                   GUATEMALAN","HISPANIC/LATINO - HONDURAN", 
+                   "HISPANIC/LATINO - DOMINICAN", 
+                   "HISPANIC/LATINO - GUATEMALAN",
+                   "HISPANIC/LATINO - HONDURAN", 
                    "HISPANIC/LATINO - MEXICAN", 
                    "HISPANIC/LATINO - PUERTO RICAN",
                    "HISPANIC/LATINO - SALVADORAN"),
