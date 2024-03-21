@@ -1,0 +1,240 @@
+---
+title: "Biostat 203B Homework 5"
+subtitle: Due Mar 22 @ 11:59PM
+author: "Ruidong Zhang 206294444"
+format:
+  html:
+    theme: cosmo
+    embed-resources: true
+    number-sections: false
+    toc: true
+    toc-depth: 4
+    toc-location: left
+    code-fold: false
+---
+
+## Predicting ICU duration
+
+Using the ICU cohort `mimiciv_icu_cohort.rds` you built in Homework 4, develop at least three machine learning approaches (logistic regression with enet regularization, random forest, boosting, SVM, MLP, etc) plus a model stacking approach for predicting whether a patient's ICU stay will be longer than 2 days. You should use the `los_long` variable as the outcome. You algorithms can use patient demographic information (gender, age at ICU `intime`, marital status, race), ICU admission information (first care unit), the last lab measurements before the ICU stay, and first vital measurements during ICU stay as features. You are welcome to use any feature engineering techniques you think are appropriate; but make sure to not use features that are not available at an ICU stay's `intime`. For instance, `last_careunit` cannot be used in your algorithms. 
+
+1. Data preprocessing and feature engineering.
+
+```{r}
+library(tidyselect)
+library(tidymodels)
+library(dplyr)
+library(recipes)
+library(tune)
+library(workflows)
+library(stacks)
+```
+
+
+2. Partition data into 50% training set and 50% test set. Stratify partitioning according to `los_long`. For grading purpose, sort the data by `subject_id`, `hadm_id`, and `stay_id` and use the seed `203` for the initial data split. Below is the sample code.
+```{r}
+#| eval: false
+library(tidymodels)
+library(dplyr)
+library(forcats)
+library(recipes)
+library(tune)
+library(workflows)
+library(stacks)
+library(tune)
+library(yardstick)  # For performance metrics
+
+set.seed(203)
+
+# Load and prepare the data
+mimiciv_icu_cohort <- readRDS("mimiciv_shiny/mimic_icu_cohort.rds")
+mimiciv_icu_cohort <- mimiciv_icu_cohort %>%
+  mutate(los_long = as.factor(los_long)) %>%
+  arrange(subject_id, hadm_id, stay_id) %>%
+  select(-dod)
+
+# Split the data
+data_split <- initial_split(mimiciv_icu_cohort, strata = "los_long", prop = 0.5)
+train_data <- training(data_split)
+test_data <- testing(data_split)
+
+# Define the recipe
+your_recipe <- recipe(los_long ~ ., data = train_data) %>%
+  step_dummy(all_nominal(), -all_outcomes()) %>%
+  step_zv(all_predictors()) %>%
+  step_impute_median(all_numeric(), -all_outcomes()) %>%
+  step_normalize(where(is.numeric), -all_outcomes()) %>%
+  step_unknown(all_nominal_predictors()) %>%
+  step_naomit(all_predictors())
+
+# Model specifications
+logistic_spec <- logistic_reg(penalty = tune(), mixture = tune()) %>%
+  set_engine("glmnet")
+  
+rf_spec <- rand_forest(mtry = tune(), trees = 1000) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
+
+# Workflows
+logistic_wf <- workflow() %>%
+  add_model(logistic_spec) %>%
+  add_recipe(your_recipe)
+
+rf_wf <- workflow() %>%
+  add_model(rf_spec) %>%
+  add_recipe(your_recipe)
+
+collect_notes(logistic_res)
+collect_notes(rf_res)
+
+# Tuning
+ctrl <- control_grid(save_pred = TRUE)
+
+logistic_res <- logistic_wf %>%
+  tune_grid(
+    resamples = vfold_cv(train_data, v = 5, strata = "los_long"), 
+    grid = grid_regular(penalty(range = c(-3, 1)), mixture(range = c(0, 1)), levels = c(10, 5)),
+    control = ctrl
+  )
+
+rf_res <- rf_wf %>%
+  tune_grid(
+    resamples = vfold_cv(train_data, v = 5, strata = "los_long"), 
+    grid = grid_regular(mtry(range = c(1, round(sqrt(ncol(train_data))))), levels = 10),
+    control = ctrl
+  )
+
+# Select the best models
+best_logistic <- select_best(logistic_res, "roc_auc")
+best_rf <- select_best(rf_res, "roc_auc")
+
+# Final workflows
+final_logistic_wf <- finalize_workflow(logistic_wf, best_logistic)
+final_rf_wf <- finalize_workflow(rf_wf, best_rf)
+
+# Fit and evaluate the final models
+final_logistic_fit <- last_fit(final_logistic_wf, split = data_split)
+final_rf_fit <- last_fit(final_rf_wf, split = data_split)
+
+logistic_metrics <- collect_metrics(final_logistic_fit)
+rf_metrics <- collect_metrics(final_rf_fit)
+
+
+# Output results
+print(logistic_metrics)
+print(rf_metrics)
+```
+
+# Select the best models
+best_logistic <- select_best(logistic_res, "roc_auc")
+best_rf <- select_best(rf_res, "roc_auc")
+
+# Final workflows
+final_logistic_wf <- finalize_workflow(logistic_wf, best_logistic)
+final_rf_wf <- finalize_workflow(rf_wf, best_rf)
+
+# Fit and evaluate the final models
+final_logistic_fit <- last_fit(final_logistic_wf, split = data_split)
+final_rf_fit <- last_fit(final_rf_wf, split = data_split)
+
+logistic_metrics <- collect_metrics(final_logistic_fit)
+rf_metrics <- collect_metrics(final_rf_fit)
+
+# Model stacking
+stack <- stacks() %>%
+  add_candidates(logistic_res) %>%
+  add_candidates(rf_res) %>%
+  blend_predictions() %>%
+  fit_members()
+
+final_stack <- finalize_stack(stack, train_data)
+stack_results <- final_stack %>%
+  predict(new_data = test_data) %>%
+  metrics(truth = "los_long", estimate = .pred_class)
+
+# Output results
+print(logistic_metrics)
+print(rf_metrics)
+print(stack_results)
+
+
+3. Train and tune the models using the training set.
+
+```{r}
+# tune the model
+
+# Select the best models
+best_logistic <- select_best(logistic_res, "roc_auc")
+best_rf <- select_best(rf_res, "roc_auc")
+
+# Finalize the workflows
+final_logistic_wf <- finalize_workflow(logistic_wf, best_logistic)
+final_rf_wf <- finalize_workflow(rf_wf, best_rf)
+
+# Fit the final models on the training set
+final_logistic_fit <- last_fit(final_logistic_wf, split = data_split)
+final_rf_fit <- last_fit(final_rf_wf, split = data_split)
+
+# Evaluate the final models on the test set
+logistic_metrics <- collect_metrics(final_logistic_fit)
+rf_metrics <- collect_metrics(final_rf_fit)
+
+# Stack the models
+stack <- stacks() %>%
+  add_candidates(logistic_res) %>%
+  add_candidates(rf_res) %>%
+  blend_predictions() %>%
+  fit_members()
+
+# Finalize the stack
+final_stack <- finalize_stack(stack, train_data)
+
+# Evaluate the stack
+stack_results <- final_stack %>%
+  predict(new_data = test_data) %>%
+  metrics(truth = "los_long", estimate = .pred_class)
+
+# Print the results
+print(logistic_metrics)
+print(rf_metrics)
+print(stack_results)
+```
+
+
+4. Compare model classification performance on the test set. Report both the area under ROC curve and accuracy for each machine learning algorithm and the model stacking. Interpret the results. What are the most important features in predicting long ICU stays? How do the models compare in terms of performance and interpretability?
+
+```{r}
+# Assuming mimiciv_icu_cohort is already loaded and preprocessed
+# Assuming data_split is already defined as per the provided code
+# Assuming final_fit is already defined as per the provided code
+
+library(tidymodels)
+
+# Use the final_fit object to make predictions on the test set
+predictions <- predict(final_fit, new_data = testing(data_split)) %>%
+  bind_cols(testing(data_split))
+
+# Calculate the area under the ROC curve
+roc_auc <- roc_auc(truth = los_long, estimate = .pred_class, data = predictions)
+
+# Calculate the accuracy
+accuracy <- accuracy(truth = los_long, estimate = .pred_class, data = predictions)
+
+# Print the results
+print(roc_auc)
+print(accuracy)
+
+# Extract the variable importance from the final_fit object
+var_importance <- final_fit %>%
+  pull_workflow_fit() %>%
+  pull_workflow() %>%
+  pull_workflow() %>%
+  pull_varimp()
+
+# Print the variable importance
+print(var_importance)
+
+# Compare the performance and interpretability of the models
+# ...
+
+
+```
