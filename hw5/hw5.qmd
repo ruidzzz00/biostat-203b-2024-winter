@@ -17,224 +17,404 @@ format:
 
 Using the ICU cohort `mimiciv_icu_cohort.rds` you built in Homework 4, develop at least three machine learning approaches (logistic regression with enet regularization, random forest, boosting, SVM, MLP, etc) plus a model stacking approach for predicting whether a patient's ICU stay will be longer than 2 days. You should use the `los_long` variable as the outcome. You algorithms can use patient demographic information (gender, age at ICU `intime`, marital status, race), ICU admission information (first care unit), the last lab measurements before the ICU stay, and first vital measurements during ICU stay as features. You are welcome to use any feature engineering techniques you think are appropriate; but make sure to not use features that are not available at an ICU stay's `intime`. For instance, `last_careunit` cannot be used in your algorithms. 
 
+```{r}
+# Load libraries
+library(dials)
+library(rpart.plot)
+library(vip)
+library(tidymodels)
+library(tidyverse)
+library(readr)
+library(GGally)
+library(gtsummary)
+library(keras)
+library(reticulate)
+library(ranger)
+library(stacks)
+library(kernlab)
+library(xgboost)
+library(dplyr)
+library(tune)
+library(parallel)
+library(doParallel)
+```
+
+
 1. Data preprocessing and feature engineering.
 
 ```{r}
-library(tidyselect)
-library(tidymodels)
-library(dplyr)
-library(recipes)
-library(tune)
-library(workflows)
-library(stacks)
+
+mimic_icu_cohort <- readRDS("mimiciv_shiny/mimic_icu_cohort.rds")
+mimic_icu_cohort 
+
+mimic_icu_cohort <- mimic_icu_cohort |>
+  mutate(intime = hour(intime)) |>
+  mutate(los_long = as.factor(los_long))
+
+# sort
+mimic_icu_cohort <- mimic_icu_cohort |>
+  select(los_long, subject_id, hadm_id, stay_id, gender, 
+         age_intime, marital_status,
+         race, first_careunit, admission_type, creatinine, 
+         wbc, glucose, chloride, hematocrit,
+         potassium, bicarbonate, sodium, temperature_fahrenheit, 
+         respiratory_rate, non_invasive_blood_pressure_diastolic,
+         non_invasive_blood_pressure_systolic, heart_rate) %>%
+  mutate(los_long = as.factor(los_long)) %>%
+print(width = Inf)
+
+mimic_icu_cohort %>%
+  arrange(subject_id, hadm_id, stay_id)
 ```
 
 
 2. Partition data into 50% training set and 50% test set. Stratify partitioning according to `los_long`. For grading purpose, sort the data by `subject_id`, `hadm_id`, and `stay_id` and use the seed `203` for the initial data split. Below is the sample code.
+
 ```{r}
-#| eval: false
-library(tidymodels)
-library(dplyr)
-library(forcats)
-library(recipes)
-library(tune)
-library(workflows)
-library(stacks)
-library(tune)
-library(yardstick)  # For performance metrics
+set.seed(203)
+
+data_split <- initial_split(
+  mimic_icu_cohort, 
+  # stratify by los_long
+  strata = "los_long", 
+  prop = 0.5
+  )
+
+cohort_other <- training(data_split)
+dim(cohort_other)
+
+cohort_test <- testing(data_split)
+dim(cohort_test)
+```
+```{r}
+# Define the recipe
+log_recipe <- recipe(los_long ~ ., data = cohort_other) %>%
+  step_rm(subject_id, hadm_id, stay_id) %>%
+  step_impute_mean(creatinine, wbc, glucose,
+         bicarbonate, sodium, chloride, potassium,
+         hematocrit, temperature_fahrenheit, 
+         respiratory_rate, non_invasive_blood_pressure_diastolic,
+         non_invasive_blood_pressure_systolic, heart_rate) %>%
+  step_impute_mode(marital_status) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_zv(all_numeric_predictors()) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  print()
+log_recipe
+
+log_mod <- 
+  logistic_reg(
+    penalty = tune(), 
+    mixture = tune()
+  ) |> 
+  set_engine("glmnet", standardize = FALSE)
+log_mod
+
+log_wf <- workflow() |>
+  add_recipe(log_recipe) |>
+  add_model(log_mod)
+log_wf
+
+log_grid <- grid_regular(
+  penalty(range = c(-6, 3)), 
+  mixture(),
+  levels = c(100, 5)
+  )
+```
+
+```{r}
+set.seed(203)
+
+folds <- vfold_cv(cohort_other, v = 5)
+folds
+```
+
+```{r}
+logit_res <- 
+  tune_grid(
+    object = log_wf, 
+    resamples = folds, 
+    grid = log_grid,
+    metrics = metric_set(roc_auc, accuracy),
+    control = control_stack_grid()
+  )
+logit_res
+```
+
+```{r}
+logit_res %>%
+  collect_metrics() %>%
+  print(width = Inf) %>%
+  filter(.metric == "roc_auc") %>%
+  ggplot(mapping = aes(x = penalty, y = mean, color = factor(mixture))) +
+  geom_point() +
+  labs(x = "Penalty", y = "CV AUC") +
+  scale_x_log10()
+
+logit_res %>%
+  show_best(metric = "roc_auc")
+
+#Select best model
+
+best_logit <- logit_res %>%
+  select_best(metric = "roc_auc")
+
+best_logit
+
+final_wf <- log_wf %>%
+  finalize_workflow(best_logit)
+
+final_wf
+
+final_fit <- final_wf %>%
+  last_fit(data_split)
+
+final_fit
+
+final_fit %>%
+  collect_metrics()
+```
+
+### Random Forest Model
+
+```{r}
+rf_recipe <- 
+  recipe(los_long ~.,
+         data = cohort_other) %>%
+  step_rm(subject_id, hadm_id, stay_id) %>%
+  step_impute_mean(creatinine, wbc, glucose,
+         bicarbonate, sodium, chloride, potassium,
+         hematocrit, temperature_fahrenheit, 
+         respiratory_rate, non_invasive_blood_pressure_diastolic,
+         non_invasive_blood_pressure_systolic, heart_rate) %>%
+  step_impute_mode(marital_status) %>%
+  step_naomit(los_long) %>%
+  step_zv(all_numeric_predictors())
+  #prep(training = cohort_other, retain = TRUE)
+
+rf_recipe
+
+rf_mod <- 
+  rand_forest(
+    mode = "classification",
+    # Number of predictors randomly sampled in each split
+    mtry = tune(),
+    # Number of trees in ensemble
+    trees = tune()
+  ) |>
+  set_engine("ranger")
+rf_mod
+
+rf_wf <- workflow() |>
+  add_recipe(rf_recipe) |>
+  add_model(rf_mod)
+rf_wf
+
+rf_grid <- grid_regular(
+  trees(range = c(100L, 500L)), 
+  mtry(range = c(1L, 5L)),
+  levels = c(5, 5)
+  )
+
+```
+
+```{r}
+set.seed(203)
+
+folds <- vfold_cv(cohort_other, v = 5)
+
+numCores <- detectCores()
+clust <- makeCluster(numCores - 1)
+registerDoParallel(clust)
+
+rf_res <- 
+  tune_grid(
+    object = rf_wf, 
+    resamples = folds, 
+    grid = rf_grid,
+    metrics = metric_set(roc_auc, accuracy),
+    control = control_stack_grid()
+  )
+rf_res
+stopCluster(clust)
+```
+
+```{r}
+rf_res %>%
+  collect_metrics() %>%
+  print(width = Inf) %>%
+  filter(.metric == "roc_auc") %>%
+  ggplot(mapping = aes(x = trees, y = mean, color = factor(mtry))) +
+  geom_point() + 
+  labs(x = "Num. of Trees", y = "CV AUC")
+
+rf_res %>%
+  show_best(metric = "roc_auc")
+
+best_rf <- rf_res %>%
+  select_best(metric = "roc_auc")
+
+best_rf
+
+final_wf <- rf_wf %>%
+  finalize_workflow(best_rf)
+
+final_wf
+
+final_fit <-
+  final_wf %>%
+  last_fit(data_split)
+
+final_fit
+
+final_fit %>%
+  collect_metrics()
+```
+
+
+```{r}
+
+# Define recipe
+bt_recipe <- recipe(los_long ~ ., data = cohort_other) %>%
+  step_rm(subject_id, hadm_id, stay_id) %>%
+  step_impute_mean(creatinine, wbc, glucose,
+         bicarbonate, sodium, chloride, potassium,
+         hematocrit, temperature_fahrenheit, 
+         respiratory_rate, non_invasive_blood_pressure_diastolic,
+         non_invasive_blood_pressure_systolic, heart_rate) %>%
+  step_impute_mode(marital_status) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_zv(all_numeric_predictors())
+bt_recipe
+
+# Define model
+bt_mod <- boost_tree(
+    trees = 1000, 
+    tree_depth = tune(), 
+    learn_rate = tune()
+) %>% 
+  set_engine("xgboost") %>%
+  set_mode("classification")
+
+bt_mod
+
+
+# Define workflow
+bt_wf <- workflow() %>%
+  add_model(bt_mod) %>%
+  add_recipe(bt_recipe)
+bt_wf
+
+# Define grid
+bt_grid <- grid_regular(
+  tree_depth(range = c(1L, 5L)),
+  learn_rate(range = c(-5, 2),
+             trans = log10_trans()),
+  levels = c(3, 10)
+)
+
+bt_grid
 
 set.seed(203)
 
-# Load and prepare the data
-mimiciv_icu_cohort <- readRDS("mimiciv_shiny/mimic_icu_cohort.rds")
-mimiciv_icu_cohort <- mimiciv_icu_cohort %>%
-  mutate(los_long = as.factor(los_long)) %>%
-  arrange(subject_id, hadm_id, stay_id) %>%
-  select(-dod)
+folds <- vfold_cv(cohort_other, v = 5)
 
-# Split the data
-data_split <- initial_split(mimiciv_icu_cohort, strata = "los_long", prop = 0.5)
-train_data <- training(data_split)
-test_data <- testing(data_split)
-
-# Define the recipe
-your_recipe <- recipe(los_long ~ ., data = train_data) %>%
-  step_dummy(all_nominal(), -all_outcomes()) %>%
-  step_zv(all_predictors()) %>%
-  step_impute_median(all_numeric(), -all_outcomes()) %>%
-  step_normalize(where(is.numeric), -all_outcomes()) %>%
-  step_unknown(all_nominal_predictors()) %>%
-  step_naomit(all_predictors())
-
-# Model specifications
-logistic_spec <- logistic_reg(penalty = tune(), mixture = tune()) %>%
-  set_engine("glmnet")
-  
-rf_spec <- rand_forest(mtry = tune(), trees = 1000) %>%
-  set_engine("ranger") %>%
-  set_mode("classification")
-
-# Workflows
-logistic_wf <- workflow() %>%
-  add_model(logistic_spec) %>%
-  add_recipe(your_recipe)
-
-rf_wf <- workflow() %>%
-  add_model(rf_spec) %>%
-  add_recipe(your_recipe)
-
-collect_notes(logistic_res)
-collect_notes(rf_res)
-
-# Tuning
-ctrl <- control_grid(save_pred = TRUE)
-
-logistic_res <- logistic_wf %>%
-  tune_grid(
-    resamples = vfold_cv(train_data, v = 5, strata = "los_long"), 
-    grid = grid_regular(penalty(range = c(-3, 1)), mixture(range = c(0, 1)), levels = c(10, 5)),
-    control = ctrl
-  )
-
-rf_res <- rf_wf %>%
-  tune_grid(
-    resamples = vfold_cv(train_data, v = 5, strata = "los_long"), 
-    grid = grid_regular(mtry(range = c(1, round(sqrt(ncol(train_data))))), levels = 10),
-    control = ctrl
-  )
-
-# Select the best models
-best_logistic <- select_best(logistic_res, "roc_auc")
-best_rf <- select_best(rf_res, "roc_auc")
-
-# Final workflows
-final_logistic_wf <- finalize_workflow(logistic_wf, best_logistic)
-final_rf_wf <- finalize_workflow(rf_wf, best_rf)
-
-# Fit and evaluate the final models
-final_logistic_fit <- last_fit(final_logistic_wf, split = data_split)
-final_rf_fit <- last_fit(final_rf_wf, split = data_split)
-
-logistic_metrics <- collect_metrics(final_logistic_fit)
-rf_metrics <- collect_metrics(final_rf_fit)
-
-
-# Output results
-print(logistic_metrics)
-print(rf_metrics)
+folds
 ```
 
-# Select the best models
-best_logistic <- select_best(logistic_res, "roc_auc")
-best_rf <- select_best(rf_res, "roc_auc")
+```{r}
+numCores <- detectCores()
+clust <- makeCluster(numCores - 1)
+registerDoParallel(clust)
 
-# Final workflows
-final_logistic_wf <- finalize_workflow(logistic_wf, best_logistic)
-final_rf_wf <- finalize_workflow(rf_wf, best_rf)
+# Tune model
+bt_res <- bt_wf %>%
+    tune_grid(
+    resamples = folds,
+    grid = bt_grid, 
+    metrics = metric_set(roc_auc, accuracy),
+    control = control_stack_grid()
+  )
 
-# Fit and evaluate the final models
-final_logistic_fit <- last_fit(final_logistic_wf, split = data_split)
-final_rf_fit <- last_fit(final_rf_wf, split = data_split)
+bt_res
 
-logistic_metrics <- collect_metrics(final_logistic_fit)
-rf_metrics <- collect_metrics(final_rf_fit)
-
-# Model stacking
-stack <- stacks() %>%
-  add_candidates(logistic_res) %>%
-  add_candidates(rf_res) %>%
-  blend_predictions() %>%
-  fit_members()
-
-final_stack <- finalize_stack(stack, train_data)
-stack_results <- final_stack %>%
-  predict(new_data = test_data) %>%
-  metrics(truth = "los_long", estimate = .pred_class)
-
-# Output results
-print(logistic_metrics)
-print(rf_metrics)
-print(stack_results)
-
-
-3. Train and tune the models using the training set.
+stopCluster(clust)
+```
 
 ```{r}
-# tune the model
+bt_res %>%
+  collect_metrics() %>%
+  print(width = Inf) %>%
+  filter(.metric == "roc_auc") %>%
+  ggplot(mapping = aes(x = learn_rate, y = mean, color = factor(tree_depth))) +
+  geom_point() +
+  labs(x = "Learning Rate", y = "CV AUC") +
+  scale_x_log10()
 
-# Select the best models
-best_logistic <- select_best(logistic_res, "roc_auc")
-best_rf <- select_best(rf_res, "roc_auc")
+# Collect and filter metrics
+bt_res %>%
+  show_best(metric = "roc_auc")
 
-# Finalize the workflows
-final_logistic_wf <- finalize_workflow(logistic_wf, best_logistic)
-final_rf_wf <- finalize_workflow(rf_wf, best_rf)
+# Select best model
+best_bt <- bt_res %>%
+  select_best(metric = "roc_auc")
 
-# Fit the final models on the training set
-final_logistic_fit <- last_fit(final_logistic_wf, split = data_split)
-final_rf_fit <- last_fit(final_rf_wf, split = data_split)
+best_bt
 
-# Evaluate the final models on the test set
-logistic_metrics <- collect_metrics(final_logistic_fit)
-rf_metrics <- collect_metrics(final_rf_fit)
+# Finalize workflow
+final_wf <- bt_wf %>%
+  finalize_workflow(best_bt)
+
+final_wf
+
+final_fit <-
+  final_wf %>%
+  last_fit(data_split)
+
+final_fit
+
+final_fit %>%
+  collect_metrics()
+
+```
+
+```{r}  
+numCores <- detectCores()
+clust <- makeCluster(numCores - 1)
+registerDoParallel(clust)
 
 # Stack the models
 stack <- stacks() %>%
-  add_candidates(logistic_res) %>%
+  add_candidates(logit_res) %>%
   add_candidates(rf_res) %>%
-  blend_predictions() %>%
+  add_candidates(bt_res) %>%
+  blend_predictions(
+    penalty = 10^(-5:1),
+    metrics = c("roc_auc")
+  ) %>%
   fit_members()
 
-# Finalize the stack
-final_stack <- finalize_stack(stack, train_data)
-
-# Evaluate the stack
-stack_results <- final_stack %>%
-  predict(new_data = test_data) %>%
-  metrics(truth = "los_long", estimate = .pred_class)
-
-# Print the results
-print(logistic_metrics)
-print(rf_metrics)
-print(stack_results)
+stopCluster(clust)
+stack
 ```
 
+```{r}
+autoplot(stack)
+```
 
+```{r}
+# Save tuned models and other objects to an RDS file    
+saveRDS(rf_res, file = "rf_res.rds")
+```
+
+```{r}
+
+# To read back the objects from the RDS files
+logit_res <- readRDS("logit_res.rds")
+rf_res <- readRDS("rf_res.rds")
+bt_res <- readRDS("bt_res.rds")
+```
 4. Compare model classification performance on the test set. Report both the area under ROC curve and accuracy for each machine learning algorithm and the model stacking. Interpret the results. What are the most important features in predicting long ICU stays? How do the models compare in terms of performance and interpretability?
 
 ```{r}
-# Assuming mimiciv_icu_cohort is already loaded and preprocessed
-# Assuming data_split is already defined as per the provided code
-# Assuming final_fit is already defined as per the provided code
-
-library(tidymodels)
-
-# Use the final_fit object to make predictions on the test set
-predictions <- predict(final_fit, new_data = testing(data_split)) %>%
-  bind_cols(testing(data_split))
-
-# Calculate the area under the ROC curve
-roc_auc <- roc_auc(truth = los_long, estimate = .pred_class, data = predictions)
-
-# Calculate the accuracy
-accuracy <- accuracy(truth = los_long, estimate = .pred_class, data = predictions)
-
-# Print the results
-print(roc_auc)
-print(accuracy)
-
-# Extract the variable importance from the final_fit object
-var_importance <- final_fit %>%
-  pull_workflow_fit() %>%
-  pull_workflow() %>%
-  pull_workflow() %>%
-  pull_varimp()
-
-# Print the variable importance
-print(var_importance)
-
-# Compare the performance and interpretability of the models
-# ...
-
-
 ```
