@@ -132,7 +132,9 @@ folds <- vfold_cv(cohort_other, v = 5)
 folds
 ```
 ## 3. Train and tune the models using the training set.
-```{r eval=FALSE}
+
+#### Logistic Regression Model
+```{r eval=TRUE}
 logit_res <- 
   tune_grid(
     object = log_wf, 
@@ -149,7 +151,7 @@ logit_res
 
 ```{r eval=TRUE}
 # To read back the objects from the RDS files
-logit_res <- readRDS("logit_res.rds")
+# logit_res <- readRDS("logit_res.rds")
 
 logit_res %>%
   collect_metrics() %>%
@@ -175,6 +177,7 @@ final_wf <- log_wf %>%
 
 final_wf
 
+# Fit the whole training set, then predict the test cases
 final_logit_fit <- final_wf %>%
   last_fit(data_split)
 
@@ -190,9 +193,9 @@ print()
 
 
 
-### Random Forest Model
+#### Random Forest Model
 
-```{r}
+```{r eval=TRUE}
 rf_recipe <- 
   recipe(los_long ~.,
          data = cohort_other) %>%
@@ -230,7 +233,7 @@ rf_grid <- grid_regular(
 
 ```
 
-```{r}
+```{r eval=FALSE}
 rf_res <- 
   tune_grid(
     object = rf_wf, 
@@ -245,7 +248,7 @@ rf_res
 # saveRDS(rf_res, "rf_res.rds")
 ```
 
-```{r}
+```{r eval=TRUE}
 # To read back the objects from the RDS files
 rf_res <- readRDS("rf_res.rds")
 
@@ -270,6 +273,7 @@ final_wf <- rf_wf %>%
 
 final_wf
 
+# Fit the whole training set, then predict the test cases
 final_rf_fit <-
   final_wf %>%
   last_fit(data_split)
@@ -284,7 +288,7 @@ rf_result <- final_rf_fit %>%
   print()
 ```
 
-### Boosting Model
+#### Boosting Model
 ```{r eval=TRUE}
 # Define recipe
 bt_recipe <- recipe(los_long ~ ., data = cohort_other) %>%
@@ -384,6 +388,7 @@ final_wf <- bt_wf %>%
 
 final_wf
 
+# Fit the whole training set, then predict the test cases
 final_bt_fit <-
   final_wf %>%
   last_fit(data_split)
@@ -397,7 +402,7 @@ bt_result <- final_bt_fit %>%
   collect_metrics() %>%
   print()
 ```
-### Model Stacking
+#### Model Stacking
 ```{r eval=FALSE}  
 numCores <- detectCores()
 clust <- makeCluster(numCores - 1)
@@ -462,7 +467,7 @@ acy <- accuracy_vec(truth = los_long_label, estimate = label)
 print(acy)
 ```
 
-### models performance on the training test set
+#### models performance 
 ```{r eval=TRUE}
 models <- c("logit_res", "rf_res", "bt_res", "stack")
 
@@ -478,7 +483,7 @@ models_performance <- tibble(
 models_performance
 ```
 
-### Interpretation
+#### Interpretation
 The Boosting model, with its ability to sequentially correct its predecessors' 
 mistakes, usually performs well on datasets with many features and complex 
 relationships. However, the fact that the Stacking approach had the highest 
@@ -493,7 +498,7 @@ patient's health at the time of ICU admission. Feature importance can be
 extracted and visualized using techniques like permutation importance or 
 SHAP (SHapley Additive exPlanations) values.
 
-### the most important features
+#### the most important features
 ```{r eval=TRUE}
 # Assuming `final_logit_fit` is your fitted logistic regression model
 logit_fit <- extract_fit_parsnip(final_logit_fit)
@@ -538,7 +543,7 @@ admission. These could include vital signs like heart rate, respiratory rate,
 temperature, addmission type, non_invasive_blood_pressure_systolic, as well as 
 lab results like creatinine, and glucose, etc.
 
-### Models Comparison
+#### Models Comparison
 Performance: Boosting shows the best trade-off between accuracy and the ability 
 to rank patients (as evidenced by the ROC AUC), which might be crucial in a 
 clinical setting for prioritizing care or interventions.
