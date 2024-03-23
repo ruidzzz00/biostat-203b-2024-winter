@@ -333,6 +333,7 @@ bt_grid
 ```
 
 ```{r eval=FALSE}
+# if we need to reproduce the boosting model, just set the chunk to eval=TRUE
 set.seed(203)
 folds <- vfold_cv(cohort_other, v = 5)
 
@@ -362,6 +363,7 @@ stopCluster(clust)
 ```{r eval=TRUE}
 # To read back the objects from the RDS files
 bt_res <- readRDS("bt_res.rds")
+# if we need to reproduce the boosting model, just set the chunk above to eval=TRUE
 
 bt_res %>%
   collect_metrics() %>%
@@ -404,6 +406,7 @@ bt_result <- final_bt_fit %>%
 ```
 #### Model Stacking
 ```{r eval=FALSE}  
+# if we need to reproduce the stack model, just set the chunk to eval=TRUE
 numCores <- detectCores()
 clust <- makeCluster(numCores - 1)
 registerDoParallel(clust)
@@ -429,6 +432,7 @@ stopCluster(clust)
 ```{r eval=TRUE}
 # To read back the objects from the RDS files
 stack <- readRDS("stack.rds")
+# if we need to reproduce the stack model, just set the chunk above to eval=TRUE
 autoplot(stack)
 ```
 
