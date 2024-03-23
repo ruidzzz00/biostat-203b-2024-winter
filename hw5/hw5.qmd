@@ -40,9 +40,9 @@ library(doParallel)
 ```
 
 
-1. Data preprocessing and feature engineering.
+## 1. Data preprocessing and feature engineering.
 
-```{r}
+```{r eval=TRUE}
 
 mimic_icu_cohort <- readRDS("mimiciv_shiny/mimic_icu_cohort.rds")
 mimic_icu_cohort 
@@ -62,15 +62,17 @@ mimic_icu_cohort <- mimic_icu_cohort |>
          non_invasive_blood_pressure_systolic, heart_rate) %>%
   mutate(los_long = as.factor(los_long)) %>%
 print(width = Inf)
-
-mimic_icu_cohort %>%
-  arrange(subject_id, hadm_id, stay_id)
 ```
 
 
-2. Partition data into 50% training set and 50% test set. Stratify partitioning according to `los_long`. For grading purpose, sort the data by `subject_id`, `hadm_id`, and `stay_id` and use the seed `203` for the initial data split. Below is the sample code.
+## 2. Partition, sort and use the seed `203` for the initial data split.
 
-```{r}
+```{r eval=TRUE}
+mimic_icu_cohort %>%
+  arrange(subject_id, hadm_id, stay_id)
+
+mimic_icu_cohort
+
 set.seed(203)
 
 data_split <- initial_split(
@@ -86,7 +88,8 @@ dim(cohort_other)
 cohort_test <- testing(data_split)
 dim(cohort_test)
 ```
-```{r}
+
+```{r eval=TRUE}
 # Define the recipe
 log_recipe <- recipe(los_long ~ ., data = cohort_other) %>%
   step_rm(subject_id, hadm_id, stay_id) %>%
@@ -122,14 +125,14 @@ log_grid <- grid_regular(
   )
 ```
 
-```{r}
+```{r eval=TRUE}
 set.seed(203)
 
 folds <- vfold_cv(cohort_other, v = 5)
 folds
 ```
-
-```{r}
+## 3. Train and tune the models using the training set.
+```{r eval=FALSE}
 logit_res <- 
   tune_grid(
     object = log_wf, 
@@ -139,9 +142,15 @@ logit_res <-
     control = control_stack_grid()
   )
 logit_res
+
+# Save tuned models and other objects to an RDS file to save time
+# saveRDS(logit_res, "logit_res.rds")
 ```
 
-```{r}
+```{r eval=TRUE}
+# To read back the objects from the RDS files
+logit_res <- readRDS("logit_res.rds")
+
 logit_res %>%
   collect_metrics() %>%
   print(width = Inf) %>%
@@ -166,14 +175,20 @@ final_wf <- log_wf %>%
 
 final_wf
 
-final_fit <- final_wf %>%
+final_logit_fit <- final_wf %>%
   last_fit(data_split)
 
-final_fit
+final_logit_fit
 
-final_fit %>%
+final_logit_fit %>%
   collect_metrics()
+
+log_result <- final_logit_fit %>%
+  collect_metrics() %>%
+print()
 ```
+
+
 
 ### Random Forest Model
 
@@ -190,19 +205,16 @@ rf_recipe <-
   step_impute_mode(marital_status) %>%
   step_naomit(los_long) %>%
   step_zv(all_numeric_predictors())
-  #prep(training = cohort_other, retain = TRUE)
 
 rf_recipe
 
 rf_mod <- 
   rand_forest(
-    mode = "classification",
-    # Number of predictors randomly sampled in each split
     mtry = tune(),
-    # Number of trees in ensemble
     trees = tune()
-  ) |>
-  set_engine("ranger")
+  ) %>%
+  set_engine("ranger", importance = "impurity") %>%
+  set_mode("classification")
 rf_mod
 
 rf_wf <- workflow() |>
@@ -219,14 +231,6 @@ rf_grid <- grid_regular(
 ```
 
 ```{r}
-set.seed(203)
-
-folds <- vfold_cv(cohort_other, v = 5)
-
-numCores <- detectCores()
-clust <- makeCluster(numCores - 1)
-registerDoParallel(clust)
-
 rf_res <- 
   tune_grid(
     object = rf_wf, 
@@ -236,10 +240,15 @@ rf_res <-
     control = control_stack_grid()
   )
 rf_res
-stopCluster(clust)
+
+# Save tuned models and other objects to an RDS file to save time
+# saveRDS(rf_res, "rf_res.rds")
 ```
 
 ```{r}
+# To read back the objects from the RDS files
+rf_res <- readRDS("rf_res.rds")
+
 rf_res %>%
   collect_metrics() %>%
   print(width = Inf) %>%
@@ -261,19 +270,22 @@ final_wf <- rf_wf %>%
 
 final_wf
 
-final_fit <-
+final_rf_fit <-
   final_wf %>%
   last_fit(data_split)
 
-final_fit
+final_rf_fit
 
-final_fit %>%
+final_rf_fit %>%
   collect_metrics()
+
+rf_result <- final_rf_fit %>%
+  collect_metrics() %>%
+  print()
 ```
 
-
-```{r}
-
+### Boosting Model
+```{r eval=TRUE}
 # Define recipe
 bt_recipe <- recipe(los_long ~ ., data = cohort_other) %>%
   step_rm(subject_id, hadm_id, stay_id) %>%
@@ -289,11 +301,11 @@ bt_recipe
 
 # Define model
 bt_mod <- boost_tree(
-    trees = 1000, 
-    tree_depth = tune(), 
-    learn_rate = tune()
+  trees = 1000, 
+  tree_depth = tune(), 
+  learn_rate = tune()
 ) %>% 
-  set_engine("xgboost") %>%
+  set_engine("xgboost", importance = "weight") %>%
   set_mode("classification")
 
 bt_mod
@@ -314,15 +326,14 @@ bt_grid <- grid_regular(
 )
 
 bt_grid
+```
 
+```{r eval=FALSE}
 set.seed(203)
-
 folds <- vfold_cv(cohort_other, v = 5)
 
 folds
-```
 
-```{r}
 numCores <- detectCores()
 clust <- makeCluster(numCores - 1)
 registerDoParallel(clust)
@@ -339,9 +350,15 @@ bt_res <- bt_wf %>%
 bt_res
 
 stopCluster(clust)
+
+# Save tuned models and other objects to an RDS file to save time
+# saveRDS(bt_res, "bt_res.rds") 
 ```
 
-```{r}
+```{r eval=TRUE}
+# To read back the objects from the RDS files
+bt_res <- readRDS("bt_res.rds")
+
 bt_res %>%
   collect_metrics() %>%
   print(width = Inf) %>%
@@ -367,18 +384,21 @@ final_wf <- bt_wf %>%
 
 final_wf
 
-final_fit <-
+final_bt_fit <-
   final_wf %>%
   last_fit(data_split)
 
-final_fit
+final_bt_fit
 
-final_fit %>%
+final_bt_fit %>%
   collect_metrics()
 
+bt_result <- final_bt_fit %>%
+  collect_metrics() %>%
+  print()
 ```
-
-```{r}  
+### Model Stacking
+```{r eval=FALSE}  
 numCores <- detectCores()
 clust <- makeCluster(numCores - 1)
 registerDoParallel(clust)
@@ -394,27 +414,144 @@ stack <- stacks() %>%
   ) %>%
   fit_members()
 
-stopCluster(clust)
 stack
+stopCluster(clust)
+
+# Save tuned models and other objects to an RDS file to save time
+# saveRDS(stack, "stack.rds")
 ```
 
-```{r}
+```{r eval=TRUE}
+# To read back the objects from the RDS files
+stack <- readRDS("stack.rds")
 autoplot(stack)
 ```
 
-```{r}
-# Save tuned models and other objects to an RDS file    
-saveRDS(rf_res, file = "rf_res.rds")
+```{r eval=TRUE}
+autoplot(stack, type = "weights")
 ```
 
-```{r}
-
-# To read back the objects from the RDS files
-logit_res <- readRDS("logit_res.rds")
-rf_res <- readRDS("rf_res.rds")
-bt_res <- readRDS("bt_res.rds")
+```{r eval=TRUE}
+autoplot(stack, type = "members")
 ```
-4. Compare model classification performance on the test set. Report both the area under ROC curve and accuracy for each machine learning algorithm and the model stacking. Interpret the results. What are the most important features in predicting long ICU stays? How do the models compare in terms of performance and interpretability?
 
-```{r}
+## 4. Compare model classification performance on the test set. Report and interpret the results.
+
+```{r eval=TRUE}
+cohort_pred <- cohort_test %>%
+  bind_cols(predict(stack, ., type = "prob")) %>%
+  print(width = Inf)
+cohort_pred
 ```
+
+```{r eval=TRUE}
+stack_roc <- yardstick::roc_auc(
+  cohort_pred,
+  truth = los_long,
+  contains(".pred_FALSE")
+  )
+stack_roc
+```
+
+```{r eval=TRUE}
+label <- factor(ifelse(cohort_pred$.pred_TRUE > 0.5, "TRUE", "FALSE"), 
+                levels = c("FALSE", "TRUE"))
+los_long_label <- factor(cohort_pred$los_long, levels = c("FALSE", "TRUE"))
+
+acy <- accuracy_vec(truth = los_long_label, estimate = label)
+print(acy)
+```
+
+### models performance on the training test set
+```{r eval=TRUE}
+models <- c("logit_res", "rf_res", "bt_res", "stack")
+
+models_performance <- tibble(
+  model = c("Logistic Regression", "Random Forest", "Boosting", "Stacking"),
+  accuracy = c(
+  log_result$.estimate[1], rf_result$.estimate[1], bt_result$.estimate[1], 
+  stack_roc$.estimate),
+  roc_auc = c(
+  log_result$.estimate[2], rf_result$.estimate[2], bt_result$.estimate[2],
+  acy)
+)
+models_performance
+```
+
+### Interpretation
+The Boosting model, with its ability to sequentially correct its predecessors' 
+mistakes, usually performs well on datasets with many features and complex 
+relationships. However, the fact that the Stacking approach had the highest 
+accuracy but not the highest ROC AUC may indicate some overfitting or that it 
+leverages the strengths of the individual models more effectively in making 
+the final prediction.
+
+In terms of feature importance, Boosting models like XGBoost provide a way to 
+assess the importance of each feature. Important features usually involve vital 
+signs, lab results, and demographic information that are indicative of the 
+patient's health at the time of ICU admission. Feature importance can be 
+extracted and visualized using techniques like permutation importance or 
+SHAP (SHapley Additive exPlanations) values.
+
+### the most important features
+```{r eval=TRUE}
+# Assuming `final_logit_fit` is your fitted logistic regression model
+logit_fit <- extract_fit_parsnip(final_logit_fit)
+
+# Extract the non-zero coefficients at the best lambda
+best_lambda <- logit_fit$fit$lambda.min
+coefs <- predict(logit_fit$fit, type = "coefficients", s = best_lambda)[,1]
+
+# Create a data frame of features and their coefficients
+feature_importance_logit <- as.data.frame(coefs, stringsAsFactors = FALSE)
+feature_importance_logit <- feature_importance_logit[-1, , drop = FALSE] 
+names(feature_importance_logit) <- c("coefficient")
+feature_importance_logit$feature <- rownames(feature_importance_logit)
+feature_importance_logit <- feature_importance_logit[
+  order(abs(feature_importance_logit$coefficient), decreasing = TRUE), ]
+
+# Print the sorted feature importances
+print(feature_importance_logit)
+```
+
+```{r eval=TRUE}
+# Extract the fitted random forest model
+fitted_rf <- extract_fit_parsnip(final_rf_fit)
+
+# Use vip to get feature importance
+rf_importance <- vip(fitted_rf, num_features = 20)
+plot(rf_importance)
+```
+
+```{r eval=TRUE}
+# Extract the fitted boosting model
+fitted_bt <- extract_fit_parsnip(final_bt_fit)
+
+# Use vip to get feature importance
+bt_importance <- vip(fitted_bt, num_features = 20)
+plot(bt_importance)
+```
+
+The most important features in predicting long ICU stays are likely to be those 
+that reflect the patient's health status and comorbidities at the time of ICU 
+admission. These could include vital signs like heart rate, respiratory rate,
+temperature, addmission type, non_invasive_blood_pressure_systolic, as well as 
+lab results like creatinine, and glucose, etc.
+
+### Models Comparison
+Performance: Boosting shows the best trade-off between accuracy and the ability 
+to rank patients (as evidenced by the ROC AUC), which might be crucial in a 
+clinical setting for prioritizing care or interventions.
+
+Interpretability: Logistic Regression and Random Forest models are often more 
+interpretable than Boosting models. The logistic regression model, for example, 
+can give insights into the odds ratio of each feature, while random forests can 
+offer information about feature importance. Boosting models, while typically 
+less interpretable, can be explored with tools like SHAP values to gain 
+insights into how features affect predictions.
+
+In conclusion, when choosing the model for predicting ICU stay length, one must 
+balance the need for predictive power with the need for interpretability and 
+trust in a high-stakes clinical environment. Additional validation on external 
+datasets or in a clinical trial setting would be beneficial before deploying 
+any of these models in a real-world scenario.
