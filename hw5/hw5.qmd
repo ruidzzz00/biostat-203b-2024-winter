@@ -1,0 +1,566 @@
+---
+title: "Biostat 203B Homework 5"
+subtitle: Due Mar 22 @ 11:59PM
+author: "Ruidong Zhang 206294444"
+format:
+  html:
+    theme: cosmo
+    embed-resources: true
+    number-sections: false
+    toc: true
+    toc-depth: 4
+    toc-location: left
+    code-fold: false
+---
+
+## Predicting ICU duration
+
+Using the ICU cohort `mimiciv_icu_cohort.rds` you built in Homework 4, develop at least three machine learning approaches (logistic regression with enet regularization, random forest, boosting, SVM, MLP, etc) plus a model stacking approach for predicting whether a patient's ICU stay will be longer than 2 days. You should use the `los_long` variable as the outcome. You algorithms can use patient demographic information (gender, age at ICU `intime`, marital status, race), ICU admission information (first care unit), the last lab measurements before the ICU stay, and first vital measurements during ICU stay as features. You are welcome to use any feature engineering techniques you think are appropriate; but make sure to not use features that are not available at an ICU stay's `intime`. For instance, `last_careunit` cannot be used in your algorithms. 
+
+```{r}
+# Load libraries
+library(dials)
+library(rpart.plot)
+library(vip)
+library(tidymodels)
+library(tidyverse)
+library(readr)
+library(GGally)
+library(gtsummary)
+library(keras)
+library(reticulate)
+library(ranger)
+library(stacks)
+library(kernlab)
+library(xgboost)
+library(dplyr)
+library(tune)
+library(parallel)
+library(doParallel)
+```
+
+
+## 1. Data preprocessing and feature engineering.
+
+```{r eval=TRUE}
+
+mimic_icu_cohort <- readRDS("mimiciv_shiny/mimic_icu_cohort.rds")
+mimic_icu_cohort 
+
+mimic_icu_cohort <- mimic_icu_cohort |>
+  mutate(intime = hour(intime)) |>
+  mutate(los_long = as.factor(los_long))
+
+# sort
+mimic_icu_cohort <- mimic_icu_cohort |>
+  select(los_long, subject_id, hadm_id, stay_id, gender, 
+         age_intime, marital_status,
+         race, first_careunit, admission_type, creatinine, 
+         wbc, glucose, chloride, hematocrit,
+         potassium, bicarbonate, sodium, temperature_fahrenheit, 
+         respiratory_rate, non_invasive_blood_pressure_diastolic,
+         non_invasive_blood_pressure_systolic, heart_rate) %>%
+  mutate(los_long = as.factor(los_long)) %>%
+print(width = Inf)
+```
+
+
+## 2. Partition, sort and use the seed `203` for the initial data split.
+
+```{r eval=TRUE}
+mimic_icu_cohort %>%
+  arrange(subject_id, hadm_id, stay_id)
+
+mimic_icu_cohort
+
+set.seed(203)
+
+data_split <- initial_split(
+  mimic_icu_cohort, 
+  # stratify by los_long
+  strata = "los_long", 
+  prop = 0.5
+  )
+
+cohort_other <- training(data_split)
+dim(cohort_other)
+
+cohort_test <- testing(data_split)
+dim(cohort_test)
+```
+
+```{r eval=TRUE}
+# Define the recipe
+log_recipe <- recipe(los_long ~ ., data = cohort_other) %>%
+  step_rm(subject_id, hadm_id, stay_id) %>%
+  step_impute_mean(creatinine, wbc, glucose,
+         bicarbonate, sodium, chloride, potassium,
+         hematocrit, temperature_fahrenheit, 
+         respiratory_rate, non_invasive_blood_pressure_diastolic,
+         non_invasive_blood_pressure_systolic, heart_rate) %>%
+  step_impute_mode(marital_status) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_zv(all_numeric_predictors()) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  print()
+log_recipe
+
+log_mod <- 
+  logistic_reg(
+    penalty = tune(), 
+    mixture = tune()
+  ) |> 
+  set_engine("glmnet", standardize = FALSE)
+log_mod
+
+log_wf <- workflow() |>
+  add_recipe(log_recipe) |>
+  add_model(log_mod)
+log_wf
+
+log_grid <- grid_regular(
+  penalty(range = c(-6, 3)), 
+  mixture(),
+  levels = c(100, 5)
+  )
+```
+
+```{r eval=TRUE}
+set.seed(203)
+
+folds <- vfold_cv(cohort_other, v = 5)
+folds
+```
+## 3. Train and tune the models using the training set.
+
+#### Logistic Regression Model
+```{r eval=TRUE}
+logit_res <- 
+  tune_grid(
+    object = log_wf, 
+    resamples = folds, 
+    grid = log_grid,
+    metrics = metric_set(roc_auc, accuracy),
+    control = control_stack_grid()
+  )
+logit_res
+
+# Save tuned models and other objects to an RDS file to save time
+# saveRDS(logit_res, "logit_res.rds")
+```
+
+```{r eval=TRUE}
+# To read back the objects from the RDS files
+# logit_res <- readRDS("logit_res.rds")
+
+logit_res %>%
+  collect_metrics() %>%
+  print(width = Inf) %>%
+  filter(.metric == "roc_auc") %>%
+  ggplot(mapping = aes(x = penalty, y = mean, color = factor(mixture))) +
+  geom_point() +
+  labs(x = "Penalty", y = "CV AUC") +
+  scale_x_log10()
+
+logit_res %>%
+  show_best(metric = "roc_auc")
+
+#Select best model
+
+best_logit <- logit_res %>%
+  select_best(metric = "roc_auc")
+
+best_logit
+
+final_wf <- log_wf %>%
+  finalize_workflow(best_logit)
+
+final_wf
+
+# Fit the whole training set, then predict the test cases
+final_logit_fit <- final_wf %>%
+  last_fit(data_split)
+
+final_logit_fit
+
+final_logit_fit %>%
+  collect_metrics()
+
+log_result <- final_logit_fit %>%
+  collect_metrics() %>%
+print()
+```
+
+
+
+#### Random Forest Model
+
+```{r eval=TRUE}
+rf_recipe <- 
+  recipe(los_long ~.,
+         data = cohort_other) %>%
+  step_rm(subject_id, hadm_id, stay_id) %>%
+  step_impute_mean(creatinine, wbc, glucose,
+         bicarbonate, sodium, chloride, potassium,
+         hematocrit, temperature_fahrenheit, 
+         respiratory_rate, non_invasive_blood_pressure_diastolic,
+         non_invasive_blood_pressure_systolic, heart_rate) %>%
+  step_impute_mode(marital_status) %>%
+  step_naomit(los_long) %>%
+  step_zv(all_numeric_predictors())
+
+rf_recipe
+
+rf_mod <- 
+  rand_forest(
+    mtry = tune(),
+    trees = tune()
+  ) %>%
+  set_engine("ranger", importance = "impurity") %>%
+  set_mode("classification")
+rf_mod
+
+rf_wf <- workflow() |>
+  add_recipe(rf_recipe) |>
+  add_model(rf_mod)
+rf_wf
+
+rf_grid <- grid_regular(
+  trees(range = c(100L, 500L)), 
+  mtry(range = c(1L, 5L)),
+  levels = c(5, 5)
+  )
+
+```
+
+```{r eval=FALSE}
+rf_res <- 
+  tune_grid(
+    object = rf_wf, 
+    resamples = folds, 
+    grid = rf_grid,
+    metrics = metric_set(roc_auc, accuracy),
+    control = control_stack_grid()
+  )
+rf_res
+
+# Save tuned models and other objects to an RDS file to save time
+# saveRDS(rf_res, "rf_res.rds")
+```
+
+```{r eval=TRUE}
+# To read back the objects from the RDS files
+rf_res <- readRDS("rf_res.rds")
+
+rf_res %>%
+  collect_metrics() %>%
+  print(width = Inf) %>%
+  filter(.metric == "roc_auc") %>%
+  ggplot(mapping = aes(x = trees, y = mean, color = factor(mtry))) +
+  geom_point() + 
+  labs(x = "Num. of Trees", y = "CV AUC")
+
+rf_res %>%
+  show_best(metric = "roc_auc")
+
+best_rf <- rf_res %>%
+  select_best(metric = "roc_auc")
+
+best_rf
+
+final_wf <- rf_wf %>%
+  finalize_workflow(best_rf)
+
+final_wf
+
+# Fit the whole training set, then predict the test cases
+final_rf_fit <-
+  final_wf %>%
+  last_fit(data_split)
+
+final_rf_fit
+
+final_rf_fit %>%
+  collect_metrics()
+
+rf_result <- final_rf_fit %>%
+  collect_metrics() %>%
+  print()
+```
+
+#### Boosting Model
+```{r eval=TRUE}
+# Define recipe
+bt_recipe <- recipe(los_long ~ ., data = cohort_other) %>%
+  step_rm(subject_id, hadm_id, stay_id) %>%
+  step_impute_mean(creatinine, wbc, glucose,
+         bicarbonate, sodium, chloride, potassium,
+         hematocrit, temperature_fahrenheit, 
+         respiratory_rate, non_invasive_blood_pressure_diastolic,
+         non_invasive_blood_pressure_systolic, heart_rate) %>%
+  step_impute_mode(marital_status) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_zv(all_numeric_predictors())
+bt_recipe
+
+# Define model
+bt_mod <- boost_tree(
+  trees = 1000, 
+  tree_depth = tune(), 
+  learn_rate = tune()
+) %>% 
+  set_engine("xgboost", importance = "weight") %>%
+  set_mode("classification")
+
+bt_mod
+
+
+# Define workflow
+bt_wf <- workflow() %>%
+  add_model(bt_mod) %>%
+  add_recipe(bt_recipe)
+bt_wf
+
+# Define grid
+bt_grid <- grid_regular(
+  tree_depth(range = c(1L, 5L)),
+  learn_rate(range = c(-5, 2),
+             trans = log10_trans()),
+  levels = c(3, 10)
+)
+
+bt_grid
+```
+
+```{r eval=FALSE}
+# if we need to reproduce the boosting model, just set the chunk to eval=TRUE
+set.seed(203)
+folds <- vfold_cv(cohort_other, v = 5)
+
+folds
+
+numCores <- detectCores()
+clust <- makeCluster(numCores - 1)
+registerDoParallel(clust)
+
+# Tune model
+bt_res <- bt_wf %>%
+    tune_grid(
+    resamples = folds,
+    grid = bt_grid, 
+    metrics = metric_set(roc_auc, accuracy),
+    control = control_stack_grid()
+  )
+
+bt_res
+
+stopCluster(clust)
+
+# Save tuned models and other objects to an RDS file to save time
+# saveRDS(bt_res, "bt_res.rds") 
+```
+
+```{r eval=TRUE}
+# To read back the objects from the RDS files
+bt_res <- readRDS("bt_res.rds")
+# if we need to reproduce the boosting model, just set the chunk above to eval=TRUE
+
+bt_res %>%
+  collect_metrics() %>%
+  print(width = Inf) %>%
+  filter(.metric == "roc_auc") %>%
+  ggplot(mapping = aes(x = learn_rate, y = mean, color = factor(tree_depth))) +
+  geom_point() +
+  labs(x = "Learning Rate", y = "CV AUC") +
+  scale_x_log10()
+
+# Collect and filter metrics
+bt_res %>%
+  show_best(metric = "roc_auc")
+
+# Select best model
+best_bt <- bt_res %>%
+  select_best(metric = "roc_auc")
+
+best_bt
+
+# Finalize workflow
+final_wf <- bt_wf %>%
+  finalize_workflow(best_bt)
+
+final_wf
+
+# Fit the whole training set, then predict the test cases
+final_bt_fit <-
+  final_wf %>%
+  last_fit(data_split)
+
+final_bt_fit
+
+final_bt_fit %>%
+  collect_metrics()
+
+bt_result <- final_bt_fit %>%
+  collect_metrics() %>%
+  print()
+```
+#### Model Stacking
+```{r eval=FALSE}  
+# if we need to reproduce the stack model, just set the chunk to eval=TRUE
+numCores <- detectCores()
+clust <- makeCluster(numCores - 1)
+registerDoParallel(clust)
+
+# Stack the models
+stack <- stacks() %>%
+  add_candidates(logit_res) %>%
+  add_candidates(rf_res) %>%
+  add_candidates(bt_res) %>%
+  blend_predictions(
+    penalty = 10^(-5:1),
+    metrics = c("roc_auc")
+  ) %>%
+  fit_members()
+
+stack
+stopCluster(clust)
+
+# Save tuned models and other objects to an RDS file to save time
+# saveRDS(stack, "stack.rds")
+```
+
+```{r eval=TRUE}
+# To read back the objects from the RDS files
+stack <- readRDS("stack.rds")
+# if we need to reproduce the stack model, just set the chunk above to eval=TRUE
+autoplot(stack)
+```
+
+```{r eval=TRUE}
+autoplot(stack, type = "weights")
+```
+
+```{r eval=TRUE}
+autoplot(stack, type = "members")
+```
+
+## 4. Compare model classification performance on the test set. Report and interpret the results.
+
+```{r eval=TRUE}
+cohort_pred <- cohort_test %>%
+  bind_cols(predict(stack, ., type = "prob")) %>%
+  print(width = Inf)
+cohort_pred
+```
+
+```{r eval=TRUE}
+stack_roc <- yardstick::roc_auc(
+  cohort_pred,
+  truth = los_long,
+  contains(".pred_FALSE")
+  )
+stack_roc
+```
+
+```{r eval=TRUE}
+label <- factor(ifelse(cohort_pred$.pred_TRUE > 0.5, "TRUE", "FALSE"), 
+                levels = c("FALSE", "TRUE"))
+los_long_label <- factor(cohort_pred$los_long, levels = c("FALSE", "TRUE"))
+
+acy <- accuracy_vec(truth = los_long_label, estimate = label)
+print(acy)
+```
+
+#### models performance 
+```{r eval=TRUE}
+models <- c("logit_res", "rf_res", "bt_res", "stack")
+
+models_performance <- tibble(
+  model = c("Logistic Regression", "Random Forest", "Boosting", "Stacking"),
+  accuracy = c(
+  log_result$.estimate[1], rf_result$.estimate[1], bt_result$.estimate[1], 
+  stack_roc$.estimate),
+  roc_auc = c(
+  log_result$.estimate[2], rf_result$.estimate[2], bt_result$.estimate[2],
+  acy)
+)
+models_performance
+```
+
+#### Interpretation
+The Boosting model, with its ability to sequentially correct its predecessors' 
+mistakes, usually performs well on datasets with many features and complex 
+relationships. However, the fact that the Stacking approach had the highest 
+accuracy but not the highest ROC AUC may indicate some overfitting or that it 
+leverages the strengths of the individual models more effectively in making 
+the final prediction.
+
+In terms of feature importance, Boosting models like XGBoost provide a way to 
+assess the importance of each feature. Important features usually involve vital 
+signs, lab results, and demographic information that are indicative of the 
+patient's health at the time of ICU admission. Feature importance can be 
+extracted and visualized using techniques like permutation importance or 
+SHAP (SHapley Additive exPlanations) values.
+
+#### the most important features
+```{r eval=TRUE}
+# Assuming `final_logit_fit` is your fitted logistic regression model
+logit_fit <- extract_fit_parsnip(final_logit_fit)
+
+# Extract the non-zero coefficients at the best lambda
+best_lambda <- logit_fit$fit$lambda.min
+coefs <- predict(logit_fit$fit, type = "coefficients", s = best_lambda)[,1]
+
+# Create a data frame of features and their coefficients
+feature_importance_logit <- as.data.frame(coefs, stringsAsFactors = FALSE)
+feature_importance_logit <- feature_importance_logit[-1, , drop = FALSE] 
+names(feature_importance_logit) <- c("coefficient")
+feature_importance_logit$feature <- rownames(feature_importance_logit)
+feature_importance_logit <- feature_importance_logit[
+  order(abs(feature_importance_logit$coefficient), decreasing = TRUE), ]
+
+# Print the sorted feature importances
+print(feature_importance_logit)
+```
+
+```{r eval=TRUE}
+# Extract the fitted random forest model
+fitted_rf <- extract_fit_parsnip(final_rf_fit)
+
+# Use vip to get feature importance
+rf_importance <- vip(fitted_rf, num_features = 20)
+plot(rf_importance)
+```
+
+```{r eval=TRUE}
+# Extract the fitted boosting model
+fitted_bt <- extract_fit_parsnip(final_bt_fit)
+
+# Use vip to get feature importance
+bt_importance <- vip(fitted_bt, num_features = 20)
+plot(bt_importance)
+```
+
+The most important features in predicting long ICU stays are likely to be those 
+that reflect the patient's health status and comorbidities at the time of ICU 
+admission. These could include vital signs like heart rate, respiratory rate,
+temperature, addmission type, non_invasive_blood_pressure_systolic, as well as 
+lab results like creatinine, and glucose, etc.
+
+#### Models Comparison
+Performance: Boosting shows the best trade-off between accuracy and the ability 
+to rank patients (as evidenced by the ROC AUC), which might be crucial in a 
+clinical setting for prioritizing care or interventions.
+
+Interpretability: Logistic Regression and Random Forest models are often more 
+interpretable than Boosting models. The logistic regression model, for example, 
+can give insights into the odds ratio of each feature, while random forests can 
+offer information about feature importance. Boosting models, while typically 
+less interpretable, can be explored with tools like SHAP values to gain 
+insights into how features affect predictions.
+
+In conclusion, when choosing the model for predicting ICU stay length, one must 
+balance the need for predictive power with the need for interpretability and 
+trust in a high-stakes clinical environment. Additional validation on external 
+datasets or in a clinical trial setting would be beneficial before deploying 
+any of these models in a real-world scenario.
